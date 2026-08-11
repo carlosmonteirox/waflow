@@ -56,6 +56,15 @@ WhatsApp credentials unreadable.
 - API keys are stored only as SHA-256 hashes and shown in plaintext once.
 - Outbound messages are queued and support an `Idempotency-Key` header.
 - Customer webhooks are HMAC signed, retried and recorded.
+- Panel logins use a single-use six-digit e-mail code that expires after five
+  minutes.
+- Team access uses expiring invitations and owner/admin/support/developer/member
+  roles; API keys can be restricted to granular team abilities.
+- Automation flows run on the Redis queue, persist every execution and dedupe
+  repeated source events.
+- Billing checkout, invoice, payment and renewal records are provider-neutral.
+  Credit, debit and Pix are prepared; `BILLING_DRIVER=pending` remains active
+  until the commercial gateway is selected.
 
 Anti-abuse controls reduce repeated trials but cannot prove that two identities
 belong to the same person. Production should combine them with e-mail reputation,
@@ -71,6 +80,24 @@ sample/   original interface reference assets
 ```
 
 The public contract and examples are documented in [`docs/API.md`](docs/API.md).
+The machine-readable OpenAPI 3.1 contract is available in
+[`docs/openapi.yaml`](docs/openapi.yaml) and at `GET /api/openapi.yaml`.
+
+## Live end-to-end test
+
+The opt-in live test validates Laravel, PostgreSQL, Redis, the queue worker,
+OpenWA and a connected WhatsApp number. It sends one real message while issuing
+eight concurrent API calls with the same idempotency key.
+
+```bash
+WAFLOW_E2E_API_KEY='waflow_...' \
+WAFLOW_E2E_INSTANCE_UUID='00000000-0000-0000-0000-000000000000' \
+WAFLOW_E2E_TO='5562999999999' \
+make e2e-live
+```
+
+The stack must already be running. The script deliberately does not create an
+account or choose a recipient automatically.
 
 ## Important
 

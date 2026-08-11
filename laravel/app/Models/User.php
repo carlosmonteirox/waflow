@@ -30,6 +30,8 @@ class User extends Authenticatable implements MustVerifyEmailContract
         'device_fingerprint_hash',
         'trial_started_at',
         'blocked_at',
+        'two_factor_enabled',
+        'last_two_factor_at',
     ];
 
     /**
@@ -54,6 +56,8 @@ class User extends Authenticatable implements MustVerifyEmailContract
             'password' => 'hashed',
             'trial_started_at' => 'datetime',
             'blocked_at' => 'datetime',
+            'two_factor_enabled' => 'boolean',
+            'last_two_factor_at' => 'datetime',
         ];
     }
 
@@ -67,5 +71,15 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return $this->belongsToMany(Workspace::class, 'workspace_members')
             ->withPivot(['role', 'status', 'joined_at'])
             ->withTimestamps();
+    }
+
+    public function twoFactorCodes(): HasMany
+    {
+        return $this->hasMany(TwoFactorCode::class);
+    }
+
+    public function sentWorkspaceInvitations(): HasMany
+    {
+        return $this->hasMany(WorkspaceInvitation::class, 'invited_by');
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\Concerns\ResolvesWorkspace;
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
+use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,7 +15,19 @@ class ContactController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        return response()->json(['data' => $this->workspace($request)->contacts()->latest()->paginate(25)]);
+        $attributes = $request->validate([
+            'search' => ['nullable', 'string', 'max:120'],
+            'has_wa_id' => ['nullable', 'boolean'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+        $query = $this->workspace($request)->contacts()->latest();
+        $query->when(filled($attributes['search'] ?? null), function ($query) use ($attributes): void {
+            $search = '%'.$attributes['search'].'%';
+            $query->where(fn ($query) => $query->where('name', 'like', $search)->orWhere('phone_number', 'like', $search)->orWhere('wa_id', 'like', $search));
+        });
+        $query->when(array_key_exists('has_wa_id', $attributes), fn ($query) => $attributes['has_wa_id'] ? $query->whereNotNull('wa_id') : $query->whereNull('wa_id'));
+
+        return ApiResponse::paginated($query->paginate(ApiResponse::perPage($request)));
     }
 
     public function store(Request $request): JsonResponse

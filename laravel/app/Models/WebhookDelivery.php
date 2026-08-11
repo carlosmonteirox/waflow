@@ -10,11 +10,11 @@ class WebhookDelivery extends Model
 {
     use HasUuid;
 
-    protected $fillable = ['uuid', 'webhook_id', 'workspace_id', 'event', 'status', 'attempt', 'response_status', 'error', 'delivered_at'];
+    protected $fillable = ['uuid', 'webhook_id', 'workspace_id', 'event', 'idempotency_key', 'payload', 'status', 'attempt', 'response_status', 'error', 'delivered_at'];
 
     protected function casts(): array
     {
-        return ['delivered_at' => 'datetime'];
+        return ['payload' => 'array', 'delivered_at' => 'datetime'];
     }
 
     public function webhook(): BelongsTo

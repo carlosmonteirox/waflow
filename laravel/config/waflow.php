@@ -27,7 +27,8 @@ return [
             'messages:read', 'messages:write', 'contacts:read', 'contacts:write',
             'flows:read', 'flows:write',
             'groups:read', 'channels:read', 'webhooks:read', 'webhooks:write',
-            'portals:read', 'portals:write', 'billing:read', 'api-keys:read', 'api-keys:write',
+            'portals:read', 'portals:write', 'billing:read', 'billing:write',
+            'api-keys:read', 'api-keys:write', 'team:read', 'team:write',
         ],
     ],
 ];

@@ -5,7 +5,6 @@ namespace App\Http\Middleware;
 use App\Models\ApiRequestLog;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 class LogApiRequest
@@ -13,8 +12,7 @@ class LogApiRequest
     public function handle(Request $request, Closure $next): Response
     {
         $started = microtime(true);
-        $requestId = (string) Str::uuid();
-        $request->headers->set('X-Request-Id', $requestId);
+        $requestId = (string) $request->attributes->get('waflow.request_id');
         $response = $next($request);
         $response->headers->set('X-Request-Id', $requestId);
 

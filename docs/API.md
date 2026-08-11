@@ -15,6 +15,28 @@ such as `instances:write`, `messages:write`, `groups:read` and `webhooks:write`.
 Requests made before e-mail verification receive HTTP 403. Expired or inactive
 subscriptions receive HTTP 402. Quota violations receive HTTP 429.
 
+Collection endpoints accept `per_page` from 1 to 100 and return:
+
+```json
+{
+  "data": [],
+  "meta": {"pagination": {"current_page": 1, "per_page": 25, "total": 0, "last_page": 1}},
+  "links": {"first": "...", "last": "...", "prev": null, "next": null}
+}
+```
+
+Errors have a stable code and request identifier while retaining top-level
+`message`, `code` and `errors` fields for existing Laravel clients:
+
+```json
+{
+  "message": "Os dados enviados são inválidos.",
+  "code": "validation_failed",
+  "error": {"code": "validation_failed", "message": "Os dados enviados são inválidos.", "details": {}},
+  "meta": {"request_id": "7e..."}
+}
+```
+
 ## Registration
 
 ```http
@@ -165,5 +187,57 @@ GET                        /plans
 GET                        /health
 ```
 
+## Billing
+
+The provider-neutral billing contract is ready for credit card, debit card and
+Pix. Until a gateway adapter is selected, checkout creation returns HTTP 202
+with status `provider_pending`; no card data is accepted or stored by Waflow.
+
+```http
+GET  /billing/summary
+GET  /billing/checkouts?status=pending&payment_method=pix
+POST /billing/checkouts
+{"plan_slug":"growth","payment_method":"pix"}
+GET  /billing/checkouts/{checkout_uuid}
+POST /billing/checkouts/{checkout_uuid}/cancel
+GET  /billing/invoices?status=open
+GET  /billing/invoices/{invoice_uuid}
+GET  /billing/payments?status=paid
+POST /billing/subscription/cancel
+POST /billing/subscription/resume
+```
+
+Expired checkouts and invitations, period-end cancellations and stale 2FA
+records are processed by the Laravel scheduler every five minutes.
+
+## Automations
+
+Flows use `message_received`, `message_failed` or `instance_connected` triggers.
+They support conditions (`equals`, `not_equals`, `contains`, `starts_with`,
+`ends_with`, `exists`, `in`) and the `send_message`, `dispatch_webhook` and
+`set_context` actions. Each source event is unique per flow.
+
+```http
+GET  /flows/{flow_uuid}/executions?status=completed
+POST /flows/{flow_uuid}/test
+{"payload":{"body":"notícia de teste"}}
+```
+
+## Team
+
+```http
+GET    /team/members?role=support&status=active
+PATCH  /team/members/{member_id}
+DELETE /team/members/{member_id}
+GET    /team/invitations?status=pending
+POST   /team/invitations
+POST   /team/invitations/{invitation_uuid}/resend
+DELETE /team/invitations/{invitation_uuid}
+```
+
+Invitations are e-mailed, expire in seven days and must be accepted by a user
+whose normalized e-mail matches the invitation.
+
 All model lookups are workspace-scoped. API requests receive an `X-Request-Id`
 and are written to the request audit table without request bodies or secrets.
+The complete OpenAPI 3.1 specification is served at `/api/openapi.yaml`.

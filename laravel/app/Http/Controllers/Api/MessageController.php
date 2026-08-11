@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\MessageEvent;
 use App\Services\UsageLimiter;
+use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -19,15 +20,31 @@ class MessageController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $attributes = $request->validate([
+            'status' => ['nullable', 'string', 'max:40'],
+            'direction' => ['nullable', Rule::in(['inbound', 'outbound'])],
+            'instance_uuid' => ['nullable', 'uuid'],
+            'search' => ['nullable', 'string', 'max:255'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'sort' => ['nullable', Rule::in(['newest', 'oldest'])],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
         $query = $this->workspace($request)->messageEvents()->with(['instance', 'contact'])->latest();
-        if ($request->filled('status')) {
-            $query->where('status', $request->string('status'));
-        }
-        if ($request->filled('direction')) {
-            $query->where('direction', $request->string('direction'));
+        $query->when(filled($attributes['status'] ?? null), fn ($query) => $query->where('status', $attributes['status']));
+        $query->when(filled($attributes['direction'] ?? null), fn ($query) => $query->where('direction', $attributes['direction']));
+        $query->when(filled($attributes['instance_uuid'] ?? null), fn ($query) => $query->whereHas('instance', fn ($instances) => $instances->where('uuid', $attributes['instance_uuid'])));
+        $query->when(filled($attributes['search'] ?? null), function ($query) use ($attributes): void {
+            $search = '%'.$attributes['search'].'%';
+            $query->where(fn ($query) => $query->where('to', 'like', $search)->orWhere('from', 'like', $search));
+        });
+        $query->when(filled($attributes['date_from'] ?? null), fn ($query) => $query->where('created_at', '>=', $attributes['date_from']));
+        $query->when(filled($attributes['date_to'] ?? null), fn ($query) => $query->where('created_at', '<=', $attributes['date_to']));
+        if (($attributes['sort'] ?? 'newest') === 'oldest') {
+            $query->reorder('created_at');
         }
 
-        return response()->json(['data' => $query->paginate(min($request->integer('per_page', 25), 100))]);
+        return ApiResponse::paginated($query->paginate(ApiResponse::perPage($request)));
     }
 
     public function store(Request $request, UsageLimiter $limiter): JsonResponse
@@ -36,28 +53,38 @@ class MessageController extends Controller
         $attributes = $this->validateMessage($request);
         $idempotencyKey = $request->header('Idempotency-Key') ?: ($attributes['idempotency_key'] ?? null);
 
-        if ($idempotencyKey) {
-            $existing = $workspace->messageEvents()->where('idempotency_key', $idempotencyKey)->first();
-            if ($existing) {
-                return response()->json(['data' => $existing, 'idempotent_replay' => true]);
+        $result = $limiter->serialized($workspace, function () use ($workspace, $attributes, $idempotencyKey, $limiter): array {
+            if ($idempotencyKey) {
+                $existing = $workspace->messageEvents()->where('idempotency_key', $idempotencyKey)->first();
+                if ($existing) {
+                    return ['message' => $existing, 'replay' => true];
+                }
             }
+
+            $limiter->ensureMessages($workspace);
+            $instance = $workspace->instances()->where('uuid', $attributes['instance_uuid'])->firstOrFail();
+            abort_unless($instance->status === 'connected', 409, 'A instância do WhatsApp não está conectada.');
+
+            return [
+                'message' => $workspace->messageEvents()->create([
+                    'whatsapp_instance_id' => $instance->id,
+                    'direction' => 'outbound',
+                    'status' => 'queued',
+                    'to' => $attributes['to'],
+                    'idempotency_key' => $idempotencyKey,
+                    'payload' => $this->payload($attributes),
+                ]),
+                'replay' => false,
+            ];
+        });
+
+        if ($result['replay']) {
+            return response()->json(['data' => $result['message'], 'idempotent_replay' => true]);
         }
 
-        $limiter->ensureMessages($workspace);
-        $instance = $workspace->instances()->where('uuid', $attributes['instance_uuid'])->firstOrFail();
-        abort_unless($instance->status === 'connected', 409, 'A instância do WhatsApp não está conectada.');
+        SendWhatsAppMessage::dispatch($result['message']->id);
 
-        $message = $workspace->messageEvents()->create([
-            'whatsapp_instance_id' => $instance->id,
-            'direction' => 'outbound',
-            'status' => 'queued',
-            'to' => $attributes['to'],
-            'idempotency_key' => $idempotencyKey,
-            'payload' => $this->payload($attributes),
-        ]);
-        SendWhatsAppMessage::dispatch($message->id);
-
-        return response()->json(['data' => $message, 'message' => 'Mensagem aceita na fila Waflow.'], 202);
+        return response()->json(['data' => $result['message'], 'message' => 'Mensagem aceita na fila Waflow.'], 202);
     }
 
     public function bulk(Request $request, UsageLimiter $limiter): JsonResponse
@@ -66,17 +93,57 @@ class MessageController extends Controller
             'messages' => ['required', 'array', 'min:1', 'max:100'],
             'messages.*' => ['required', 'array'],
         ]);
-        $limiter->ensureMessages($this->workspace($request), count($attributes['messages']));
-        $created = [];
+        $workspace = $this->workspace($request);
+        $validated = [];
         foreach ($attributes['messages'] as $item) {
             $child = Request::create($request->path(), 'POST', $item);
-            $child->headers->set('Authorization', (string) $request->header('Authorization'));
-            $child->attributes->add($request->attributes->all());
-            $response = $this->store($child, $limiter);
-            $created[] = $response->getData(true)['data'];
+            $validated[] = $this->validateMessage($child);
         }
 
-        return response()->json(['data' => $created], 202);
+        $result = $limiter->serialized($workspace, function () use ($workspace, $validated, $limiter): array {
+            $pendingKeys = [];
+            $newCount = 0;
+            foreach ($validated as $item) {
+                $key = $item['idempotency_key'] ?? null;
+                if ($key && (isset($pendingKeys[$key]) || $workspace->messageEvents()->where('idempotency_key', $key)->exists())) {
+                    continue;
+                }
+                if ($key) {
+                    $pendingKeys[$key] = true;
+                }
+                $newCount++;
+            }
+
+            $limiter->ensureMessages($workspace, $newCount);
+            $messages = [];
+            $createdIds = [];
+            foreach ($validated as $item) {
+                $key = $item['idempotency_key'] ?? null;
+                $message = $key ? $workspace->messageEvents()->where('idempotency_key', $key)->first() : null;
+                if (! $message) {
+                    $instance = $workspace->instances()->where('uuid', $item['instance_uuid'])->firstOrFail();
+                    abort_unless($instance->status === 'connected', 409, 'A instância do WhatsApp não está conectada.');
+                    $message = $workspace->messageEvents()->create([
+                        'whatsapp_instance_id' => $instance->id,
+                        'direction' => 'outbound',
+                        'status' => 'queued',
+                        'to' => $item['to'],
+                        'idempotency_key' => $key,
+                        'payload' => $this->payload($item),
+                    ]);
+                    $createdIds[] = $message->id;
+                }
+                $messages[] = $message;
+            }
+
+            return compact('messages', 'createdIds');
+        });
+
+        foreach ($result['createdIds'] as $messageId) {
+            SendWhatsAppMessage::dispatch($messageId);
+        }
+
+        return response()->json(['data' => $result['messages']], 202);
     }
 
     public function show(Request $request, MessageEvent $message): JsonResponse

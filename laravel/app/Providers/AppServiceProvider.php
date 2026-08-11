@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\BillingGateway;
+use App\Services\Billing\PendingBillingGateway;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -14,7 +16,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(BillingGateway::class, PendingBillingGateway::class);
     }
 
     /**

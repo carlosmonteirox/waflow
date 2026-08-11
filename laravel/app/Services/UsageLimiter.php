@@ -3,10 +3,27 @@
 namespace App\Services;
 
 use App\Models\Workspace;
+use Closure;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class UsageLimiter
 {
+    /**
+     * Serialize quota-sensitive writes for a workspace.
+     *
+     * PostgreSQL locks the workspace row until the transaction commits, so two
+     * simultaneous requests cannot both observe the same available quota.
+     */
+    public function serialized(Workspace $workspace, Closure $operation): mixed
+    {
+        return DB::transaction(function () use ($workspace, $operation): mixed {
+            Workspace::query()->whereKey($workspace->getKey())->lockForUpdate()->firstOrFail();
+
+            return $operation();
+        }, 3);
+    }
+
     public function ensureInstances(Workspace $workspace, int $increment = 1): void
     {
         $this->ensure($workspace, 'instances', $workspace->instances()->count(), $increment);
@@ -45,7 +62,7 @@ class UsageLimiter
             'messages' => 'message_limit',
             'webhooks' => 'webhook_limit',
             'api_keys' => 'api_key_limit',
-            'portals' => 'instance_limit',
+            'portals' => 'portal_limit',
             default => null,
         }, 0);
     }

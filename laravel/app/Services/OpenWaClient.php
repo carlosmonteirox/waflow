@@ -76,7 +76,7 @@ class OpenWaClient
 
     public function groups(string $sessionId, int $limit = 1000, int $offset = 0): array
     {
-        return $this->json($this->call(fn () => $this->request()->get("/api/sessions/{$sessionId}/groups", compact('limit', 'offset'))));
+        return $this->json($this->call(fn () => $this->request()->get("/api/sessions/{$sessionId}/groups", ['limit' => $limit, 'offset' => $offset])));
     }
 
     public function channels(string $sessionId): array
@@ -86,7 +86,7 @@ class OpenWaClient
 
     public function contacts(string $sessionId, int $limit = 1000, int $offset = 0): array
     {
-        return $this->json($this->call(fn () => $this->request()->get("/api/sessions/{$sessionId}/contacts", compact('limit', 'offset'))));
+        return $this->json($this->call(fn () => $this->request()->get("/api/sessions/{$sessionId}/contacts", ['limit' => $limit, 'offset' => $offset])));
     }
 
     public function createInternalWebhook(string $sessionId): array

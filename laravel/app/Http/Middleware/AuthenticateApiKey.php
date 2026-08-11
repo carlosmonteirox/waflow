@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\ApiKey;
+use App\Support\ApiResponse;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,7 +15,7 @@ class AuthenticateApiKey
         $plainTextToken = $request->bearerToken() ?: $request->header('X-Waflow-Key');
 
         if (! is_string($plainTextToken) || $plainTextToken === '') {
-            return response()->json(['message' => 'Chave de API ausente.'], 401);
+            return ApiResponse::error($request, 'api_key_missing', 'Chave de API ausente.', 401);
         }
 
         $apiKey = ApiKey::query()
@@ -23,7 +24,7 @@ class AuthenticateApiKey
             ->first();
 
         if (! $apiKey || ($apiKey->expires_at && $apiKey->expires_at->isPast())) {
-            return response()->json(['message' => 'Chave de API inválida.'], 401);
+            return ApiResponse::error($request, 'api_key_invalid', 'Chave de API inválida.', 401);
         }
 
         $apiKey->forceFill(['last_used_at' => now()])->save();

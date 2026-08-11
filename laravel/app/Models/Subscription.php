@@ -14,6 +14,11 @@ class Subscription extends Model
         'billing_cycle',
         'trial_ends_at',
         'current_period_ends_at',
+        'payment_provider',
+        'provider_customer_id',
+        'provider_subscription_id',
+        'cancel_at_period_end',
+        'cancelled_at',
     ];
 
     protected function casts(): array
@@ -21,6 +26,8 @@ class Subscription extends Model
         return [
             'trial_ends_at' => 'datetime',
             'current_period_ends_at' => 'datetime',
+            'cancel_at_period_end' => 'boolean',
+            'cancelled_at' => 'datetime',
         ];
     }
 

@@ -15,6 +15,7 @@ class Plan extends Model
         'message_limit',
         'webhook_limit',
         'api_key_limit',
+        'portal_limit',
         'features',
     ];
 
@@ -27,6 +28,7 @@ class Plan extends Model
             'message_limit' => 'integer',
             'webhook_limit' => 'integer',
             'api_key_limit' => 'integer',
+            'portal_limit' => 'integer',
         ];
     }
 

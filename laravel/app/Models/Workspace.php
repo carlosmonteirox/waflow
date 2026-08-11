@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -10,7 +11,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Workspace extends Model
 {
+    use HasUuid;
+
     protected $fillable = [
+        'uuid',
         'owner_id',
         'name',
         'slug',
@@ -73,5 +77,30 @@ class Workspace extends Model
     public function portals(): HasMany
     {
         return $this->hasMany(Portal::class);
+    }
+
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(WorkspaceInvitation::class);
+    }
+
+    public function checkoutSessions(): HasMany
+    {
+        return $this->hasMany(BillingCheckoutSession::class);
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function flowExecutions(): HasMany
+    {
+        return $this->hasMany(FlowExecution::class);
     }
 }

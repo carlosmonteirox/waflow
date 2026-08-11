@@ -18,6 +18,7 @@ class WorkspaceController extends Controller
         return response()->json([
             'data' => [
                 'id' => $workspace->id,
+                'uuid' => $workspace->uuid,
                 'name' => $workspace->name,
                 'slug' => $workspace->slug,
                 'timezone' => $workspace->timezone,
@@ -29,6 +30,7 @@ class WorkspaceController extends Controller
                     'message_limit',
                     'webhook_limit',
                     'api_key_limit',
+                    'portal_limit',
                 ]),
             ],
         ]);

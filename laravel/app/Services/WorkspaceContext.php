@@ -14,10 +14,16 @@ class WorkspaceContext
 {
     public function forUser(User $user): Workspace
     {
-        $workspace = $user->workspaces()
+        $selectedUuid = session()->get('waflow.workspace_uuid');
+        $query = $user->workspaces()
             ->with(['subscription.plan', 'members.user'])
-            ->wherePivot('status', 'active')
-            ->first();
+            ->wherePivot('status', 'active');
+        $workspace = $selectedUuid ? (clone $query)->where('workspaces.uuid', $selectedUuid)->first() : null;
+        $workspace ??= $query->first();
+
+        if ($workspace) {
+            session()->put('waflow.workspace_uuid', $workspace->uuid);
+        }
 
         return $workspace ?: $this->createForUser($user);
     }
@@ -68,6 +74,7 @@ class WorkspaceContext
                 'message_limit' => 50000,
                 'webhook_limit' => 10,
                 'api_key_limit' => 5,
+                'portal_limit' => 10,
                 'features' => [
                     'Instâncias multi-tenant',
                     'Webhooks por workspace',

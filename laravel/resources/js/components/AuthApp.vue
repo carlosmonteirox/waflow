@@ -232,20 +232,27 @@ function movePinFocus(event) {
         </div>
 
         <div v-else-if="page === 'two-factor'" class="kt-card waflow-auth-card-sm">
-            <form :action="route('login')" class="kt-card-content flex flex-col gap-5 p-10 waflow-auth-padding" method="get">
+            <form :action="route('twoFactorStore')" class="kt-card-content flex flex-col gap-5 p-10 waflow-auth-padding" method="post">
+                <input name="_token" type="hidden" :value="csrfToken">
                 <img alt="" class="dark:hidden h-20 mb-2" :src="'/assets/media/illustrations/34.svg'">
                 <img alt="" class="light:hidden h-20 mb-2" :src="'/assets/media/illustrations/34-dark.svg'">
                 <div class="text-center mb-2">
                     <h3 class="text-lg font-medium text-mono mb-5">Verificação em duas etapas</h3>
                     <div class="flex flex-col">
-                        <span class="text-sm text-secondary-foreground mb-1.5">Digite o código de autenticação da conta.</span>
-                        <span class="text-sm font-medium text-mono">Waflow</span>
+                        <span class="text-sm text-secondary-foreground mb-1.5">Enviamos um código de 6 números para o e-mail cadastrado.</span>
+                        <span class="text-sm font-medium text-mono">O código expira em 5 minutos.</span>
                     </div>
                 </div>
                 <div class="flex flex-wrap justify-center gap-2.5">
                     <input v-for="index in 6" :key="index" :aria-label="`Dígito ${index} de 6`" :autocomplete="index === 1 ? 'one-time-code' : 'off'" class="kt-input focus:border-primary/10 focus:ring-3 focus:ring-primary/10 size-10 shrink-0 px-0 text-center" inputmode="numeric" maxlength="1" name="verification_code[]" type="text" @input="movePinFocus">
                 </div>
+                <div v-if="flash.status" class="kt-badge kt-badge-light kt-badge-success justify-center py-2">{{ flash.status }}</div>
+                <div v-if="errors.length" class="kt-badge kt-badge-light kt-badge-destructive justify-center py-2">{{ errors[0] }}</div>
                 <button class="kt-btn kt-btn-primary flex justify-center grow" type="submit">Continuar</button>
+            </form>
+            <form :action="route('twoFactorResend')" class="px-10 pb-8 -mt-5" method="post">
+                <input name="_token" type="hidden" :value="csrfToken">
+                <button class="kt-btn kt-btn-ghost w-full" type="submit">Reenviar código</button>
             </form>
         </div>
     </div>

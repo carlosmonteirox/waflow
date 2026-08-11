@@ -19,6 +19,8 @@ const csrfToken = computed(() => props.payload.csrfToken || '');
 const flash = computed(() => props.payload.flash || {});
 const errors = computed(() => flash.value.errors || []);
 const workspace = computed(() => props.payload.workspace || {});
+const workspaces = computed(() => props.payload.workspaces || []);
+const permissions = computed(() => workspace.value.permissions || {});
 const plan = computed(() => props.payload.plan || { name: 'Growth', features: [] });
 const user = computed(() => props.payload.user || {});
 const usage = computed(() => props.payload.usage || {});
@@ -34,10 +36,13 @@ const endpoints = [
     ['POST', '/api/v1/instances/{uuid}/connect', 'Solicitar conexão'],
     ['GET|POST', '/api/v1/messages', 'Consultar e enfileirar mensagens'],
     ['GET|POST', '/api/v1/contacts', 'Base de contatos'],
+    ['GET|POST', '/api/v1/portals', 'Sites vinculados ao workspace'],
     ['GET|POST', '/api/v1/flows', 'Fluxos de automação'],
+    ['GET|POST', '/api/v1/team/invitations', 'Convites e equipe'],
     ['GET|POST', '/api/v1/webhooks', 'Callbacks de eventos'],
     ['GET|POST|DELETE', '/api/v1/api-keys', 'Gerenciar chaves'],
     ['GET', '/api/v1/billing/usage', 'Uso e limites do plano'],
+    ['POST', '/api/v1/billing/checkouts', 'Checkout por cartão ou Pix'],
 ];
 
 const usageLabels = {
@@ -45,6 +50,7 @@ const usageLabels = {
     instances: 'Instâncias',
     webhooks: 'Webhooks',
     api_keys: 'Chaves API',
+    portals: 'Portais',
 };
 
 const metricCards = computed(() => {
@@ -110,8 +116,14 @@ function badgeVariant(status, fallback = 'secondary') {
         online: 'success',
         qr_pending: 'warning',
         pending: 'warning',
+        provider_pending: 'warning',
         queued: 'warning',
         draft: 'secondary',
+        paused: 'secondary',
+        revoked: 'secondary',
+        accepted: 'success',
+        completed: 'success',
+        expired: 'destructive',
         inactive: 'secondary',
         disconnected: 'secondary',
         failed: 'destructive',
@@ -172,8 +184,18 @@ function progressWidth(item) {
                         <div class="min-w-0">
                             <div class="text-sm font-semibold text-mono truncate">{{ workspace.name }}</div>
                             <div class="text-xs text-muted-foreground truncate">Plano {{ plan?.name || 'Growth' }}</div>
+                            <div class="text-xs text-muted-foreground truncate">Perfil {{ workspace.member_role || 'member' }}</div>
                         </div>
                     </div>
+                    <details v-if="workspaces.length > 1" class="mt-3 border-t border-border/40 pt-2">
+                        <summary class="cursor-pointer text-xs font-medium text-primary">Trocar workspace</summary>
+                        <div class="grid gap-1 mt-2">
+                            <form v-for="available in workspaces.filter((item) => !item.active)" :key="available.uuid" :action="available.select_url" method="post">
+                                <input name="_token" type="hidden" :value="csrfToken">
+                                <button class="kt-btn kt-btn-sm kt-btn-ghost w-full justify-start" type="submit">{{ available.name }} · {{ available.role }}</button>
+                            </form>
+                        </div>
+                    </details>
                 </div>
             </div>
 
@@ -274,6 +296,12 @@ function progressWidth(item) {
                         <div class="grid gap-2">
                             <div class="kt-alert-title">Segredo criado. Copie agora.</div>
                             <code class="waflow-code">{{ flash.webhookSecret }}</code>
+                        </div>
+                    </div>
+                    <div v-if="flash.portalToken" class="kt-alert kt-alert-primary mb-5">
+                        <div class="grid gap-2">
+                            <div class="kt-alert-title">Token do portal. Copie agora para concluir a verificação.</div>
+                            <code class="waflow-code">{{ flash.portalToken }}</code>
                         </div>
                     </div>
                     <div v-if="errors.length" class="kt-alert kt-alert-destructive mb-5">
@@ -532,6 +560,8 @@ function progressWidth(item) {
                                                 <th>Gatilho</th>
                                                 <th>Status</th>
                                                 <th>Última execução</th>
+                                                <th>Execuções</th>
+                                                <th class="text-end">Ações</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -540,9 +570,22 @@ function progressWidth(item) {
                                                 <td>{{ flow.trigger_label }}</td>
                                                 <td><span class="kt-badge kt-badge-light" :class="`kt-badge-${badgeVariant(flow.status)}`">{{ flow.status }}</span></td>
                                                 <td>{{ flow.last_run_human || '-' }}</td>
+                                                <td>{{ flow.run_count || 0 }} / {{ flow.failure_count || 0 }} falhas</td>
+                                                <td>
+                                                    <div class="flex justify-end gap-2">
+                                                        <form :action="flow.toggle_url" method="post">
+                                                            <input name="_token" type="hidden" :value="csrfToken">
+                                                            <button class="kt-btn kt-btn-sm kt-btn-outline" type="submit">{{ flow.status === 'active' ? 'Pausar' : 'Ativar' }}</button>
+                                                        </form>
+                                                        <form :action="flow.test_url" method="post">
+                                                            <input name="_token" type="hidden" :value="csrfToken">
+                                                            <button class="kt-btn kt-btn-sm kt-btn-primary" type="submit">Testar</button>
+                                                        </form>
+                                                    </div>
+                                                </td>
                                             </tr>
                                             <tr v-if="!pageData.flows?.length">
-                                                <td colspan="4" class="text-center text-secondary-foreground py-10">Nenhum fluxo criado.</td>
+                                                <td colspan="6" class="text-center text-secondary-foreground py-10">Nenhum fluxo criado.</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -568,54 +611,76 @@ function progressWidth(item) {
                                         <option value="instance_connected">Instância conectada</option>
                                     </select>
                                 </div>
+                                <div class="grid gap-1">
+                                    <label class="kt-form-label" for="flow_status">Status inicial</label>
+                                    <select id="flow_status" class="kt-input" name="status"><option value="draft">Rascunho</option><option value="active">Ativo</option></select>
+                                </div>
+                                <div class="border-t border-border pt-3 grid gap-3">
+                                    <div class="text-sm font-medium text-mono">Condição opcional</div>
+                                    <input class="kt-input" name="condition_field" placeholder="trigger.body">
+                                    <select class="kt-input" name="condition_operator"><option value="contains">Contém</option><option value="equals">Igual</option><option value="not_equals">Diferente</option><option value="starts_with">Começa com</option><option value="ends_with">Termina com</option><option value="exists">Existe</option></select>
+                                    <input class="kt-input" name="condition_value" placeholder="Valor esperado">
+                                </div>
+                                <div class="border-t border-border pt-3 grid gap-3">
+                                    <div class="text-sm font-medium text-mono">Resposta automática</div>
+                                    <select class="kt-input" name="instance_uuid">
+                                        <option value="">Usar instância do evento</option>
+                                        <option v-for="instance in pageData.instances || []" :key="instance.uuid" :value="instance.uuid">{{ instance.name }}</option>
+                                    </select>
+                                    <input class="kt-input" name="recipient" placeholder="Vazio usa o remetente do evento">
+                                    <textarea class="kt-input min-h-24" name="message_text" placeholder="Olá! Recebemos sua mensagem."></textarea>
+                                </div>
                                 <button class="kt-btn kt-btn-primary justify-center" type="submit">Criar fluxo</button>
                             </form>
                         </div>
+
+                        <div class="kt-card waflow-span-3">
+                            <div class="kt-card-header"><h3 class="kt-card-title">Execuções recentes</h3></div>
+                            <div class="kt-card-table"><div class="waflow-table-wrap"><table class="kt-table">
+                                <thead><tr><th>Fluxo</th><th>Gatilho</th><th>Status</th><th>Data</th><th>Erro</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="execution in pageData.executions || []" :key="execution.uuid">
+                                        <td>{{ execution.flow_name }}</td><td>{{ execution.trigger_type }}</td>
+                                        <td><span class="kt-badge kt-badge-light" :class="`kt-badge-${badgeVariant(execution.status)}`">{{ execution.status }}</span></td>
+                                        <td>{{ execution.created_at_label }}</td><td class="max-w-[320px] truncate">{{ execution.error || '-' }}</td>
+                                    </tr>
+                                    <tr v-if="!pageData.executions?.length"><td colspan="5" class="text-center text-secondary-foreground py-8">Nenhuma execução registrada.</td></tr>
+                                </tbody>
+                            </table></div></div>
+                        </div>
                     </section>
 
-                    <section v-else-if="page === 'messages'" class="kt-card">
-                        <div class="kt-card-header">
-                            <div>
-                                <h3 class="kt-card-title">Eventos de mensagens</h3>
-                                <p class="kt-card-description">Base que será consumida por filas, webhooks e relatórios.</p>
+                    <section v-else-if="page === 'messages'" class="waflow-grid waflow-grid-3">
+                        <div class="kt-card waflow-span-2">
+                            <div class="kt-card-header">
+                                <div>
+                                    <h3 class="kt-card-title">Eventos de mensagens</h3>
+                                    <p class="kt-card-description">Base consumida por filas, webhooks e relatórios.</p>
+                                </div>
+                                <span class="kt-badge kt-badge-light kt-badge-primary">{{ pageData.messages?.total || 0 }} eventos</span>
                             </div>
-                            <span class="kt-badge kt-badge-light kt-badge-primary">{{ pageData.messages?.total || 0 }} eventos</span>
+                            <div class="kt-card-table"><div class="waflow-table-wrap"><table class="kt-table">
+                                <thead><tr><th>UUID</th><th>Direção</th><th>Contato</th><th>Status</th><th>Instância</th><th>Data</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="message in pageData.messages?.items" :key="message.uuid">
+                                        <td><code class="text-xs">{{ message.uuid }}</code></td><td>{{ message.direction }}</td><td>{{ message.to || message.from || '-' }}</td>
+                                        <td><span class="kt-badge kt-badge-light" :class="`kt-badge-${badgeVariant(message.status)}`">{{ message.status }}</span></td><td>{{ message.instance_name || '-' }}</td><td>{{ message.created_at_label }}</td>
+                                    </tr>
+                                    <tr v-if="!pageData.messages?.items?.length"><td colspan="6" class="text-center text-secondary-foreground py-10">Nenhuma mensagem registrada.</td></tr>
+                                </tbody>
+                            </table></div></div>
+                            <div v-if="pageData.messages?.links?.length" class="kt-card-footer"><div class="flex flex-wrap gap-2"><a v-for="link in pageData.messages.links" :key="`${link.label}-${link.url}`" class="kt-btn kt-btn-sm" :class="link.active ? 'kt-btn-primary' : 'kt-btn-outline'" :href="link.url || '#'" :aria-disabled="!link.url">{{ link.label }}</a></div></div>
                         </div>
-                        <div class="kt-card-table">
-                            <div class="waflow-table-wrap">
-                                <table class="kt-table">
-                                    <thead>
-                                        <tr>
-                                            <th>UUID</th>
-                                            <th>Direção</th>
-                                            <th>Contato</th>
-                                            <th>Status</th>
-                                            <th>Instância</th>
-                                            <th>Data</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr v-for="message in pageData.messages?.items" :key="message.uuid">
-                                            <td><code class="text-xs">{{ message.uuid }}</code></td>
-                                            <td>{{ message.direction }}</td>
-                                            <td>{{ message.to || message.from || '-' }}</td>
-                                            <td><span class="kt-badge kt-badge-light" :class="`kt-badge-${badgeVariant(message.status)}`">{{ message.status }}</span></td>
-                                            <td>{{ message.instance_name || '-' }}</td>
-                                            <td>{{ message.created_at_label }}</td>
-                                        </tr>
-                                        <tr v-if="!pageData.messages?.items?.length">
-                                            <td colspan="6" class="text-center text-secondary-foreground py-10">Nenhuma mensagem registrada.</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div v-if="pageData.messages?.links?.length" class="kt-card-footer">
-                            <div class="flex flex-wrap gap-2">
-                                <a v-for="link in pageData.messages.links" :key="`${link.label}-${link.url}`" class="kt-btn kt-btn-sm" :class="link.active ? 'kt-btn-primary' : 'kt-btn-outline'" :href="link.url || '#'" :aria-disabled="!link.url">
-                                    {{ link.label }}
-                                </a>
-                            </div>
+
+                        <div class="kt-card">
+                            <div class="kt-card-header"><h3 class="kt-card-title">Enviar mensagem</h3></div>
+                            <form class="kt-card-content p-5 grid gap-4" :action="routeGroup('messages').store" method="post">
+                                <input name="_token" type="hidden" :value="csrfToken">
+                                <div class="grid gap-1"><label class="kt-form-label">Instância conectada</label><select class="kt-input" name="instance_uuid" required><option value="">Selecione</option><option v-for="instance in pageData.instances || []" :key="instance.uuid" :value="instance.uuid" :disabled="instance.status !== 'connected'">{{ instance.name }} — {{ instance.status_label }}</option></select></div>
+                                <div class="grid gap-1"><label class="kt-form-label">Destino</label><input class="kt-input" name="to" placeholder="5562999999999" required></div>
+                                <div class="grid gap-1"><label class="kt-form-label">Texto</label><textarea class="kt-input min-h-28" name="text" maxlength="4096" required></textarea></div>
+                                <button class="kt-btn kt-btn-primary justify-center" type="submit">Adicionar à fila</button>
+                            </form>
                         </div>
                     </section>
 
@@ -678,6 +743,34 @@ function progressWidth(item) {
                         </div>
                     </section>
 
+                    <section v-else-if="page === 'portals'" class="waflow-grid waflow-grid-3">
+                        <div class="kt-card waflow-span-2">
+                            <div class="kt-card-header"><h3 class="kt-card-title">Portais vinculados</h3><span class="kt-badge kt-badge-light kt-badge-primary">{{ pageData.portals?.length || 0 }} portais</span></div>
+                            <div class="kt-card-table"><div class="waflow-table-wrap"><table class="kt-table">
+                                <thead><tr><th>Nome</th><th>Domínio</th><th>Status</th><th>Verificação</th><th class="text-end">Ações</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="portal in pageData.portals || []" :key="portal.uuid">
+                                        <td><a class="font-medium text-primary" :href="portal.url" target="_blank" rel="noopener">{{ portal.name }}</a></td><td>{{ portal.domain }}</td>
+                                        <td><span class="kt-badge kt-badge-light" :class="`kt-badge-${badgeVariant(portal.status)}`">{{ portal.status }}</span></td><td>{{ portal.verified_at_label || '-' }}</td>
+                                        <td><div v-if="permissions.manage_integrations" class="flex justify-end gap-2"><form v-if="portal.status !== 'verified'" class="flex gap-2" :action="portal.verify_url" method="post"><input name="_token" type="hidden" :value="csrfToken"><input class="kt-input kt-input-sm max-w-44" name="verification_token" placeholder="Token" required><button class="kt-btn kt-btn-sm kt-btn-outline" type="submit">Verificar</button></form><form :action="portal.delete_url" method="post" @submit="confirmSubmit($event, 'Remover este portal?')"><input name="_token" type="hidden" :value="csrfToken"><input name="_method" type="hidden" value="delete"><button class="kt-btn kt-btn-sm kt-btn-outline" type="submit">Remover</button></form></div></td>
+                                    </tr>
+                                    <tr v-if="!pageData.portals?.length"><td colspan="5" class="text-center text-secondary-foreground py-8">Nenhum portal cadastrado.</td></tr>
+                                </tbody>
+                            </table></div></div>
+                        </div>
+
+                        <div class="kt-card">
+                            <div class="kt-card-header"><h3 class="kt-card-title">Adicionar portal</h3></div>
+                            <form v-if="permissions.manage_integrations" class="kt-card-content p-5 grid gap-4" :action="routeGroup('portals').store" method="post">
+                                <input name="_token" type="hidden" :value="csrfToken">
+                                <div class="grid gap-1"><label class="kt-form-label">Nome</label><input class="kt-input" name="name" placeholder="Portal principal" required></div>
+                                <div class="grid gap-1"><label class="kt-form-label">URL</label><input class="kt-input" name="url" type="url" placeholder="https://portal.com.br" required></div>
+                                <button class="kt-btn kt-btn-primary justify-center" type="submit">Adicionar portal</button>
+                            </form>
+                            <div v-else class="kt-card-content p-5 text-sm text-secondary-foreground">Seu perfil tem acesso somente à consulta dos portais.</div>
+                        </div>
+                    </section>
+
                     <section v-else-if="page === 'developers'" class="waflow-grid waflow-grid-3">
                         <div class="kt-card waflow-span-2">
                             <div class="kt-card-header">
@@ -718,6 +811,7 @@ function progressWidth(item) {
                                     <code class="waflow-code">Authorization: Bearer waflow_xxxxxxxxxxxxxxxxx</code>
                                     <div class="text-sm text-secondary-foreground">Header alternativo</div>
                                     <code class="waflow-code">X-Waflow-Key: waflow_xxxxxxxxxxxxxxxxx</code>
+                                    <a class="kt-btn kt-btn-primary justify-center" :href="pageData.openapi_url">Baixar OpenAPI 3.1</a>
                                 </div>
                             </div>
 
@@ -730,6 +824,7 @@ function progressWidth(item) {
   -H "Authorization: Bearer waflow_xxx"
   -H "Content-Type: application/json"
   -d '{"to":"+5562999999999","body":"Ola pelo Waflow"}'</code>
+                                    <div class="text-sm text-secondary-foreground mt-4">Erros seguem o contrato <code>error.code</code>, <code>error.message</code>, <code>error.details</code> e <code>meta.request_id</code>.</div>
                                 </div>
                             </div>
                         </div>
@@ -759,7 +854,7 @@ function progressWidth(item) {
                                                 <td>{{ webhook.events_label }}</td>
                                                 <td><span class="kt-badge kt-badge-light" :class="`kt-badge-${badgeVariant(webhook.status)}`">{{ webhook.status }}</span></td>
                                                 <td>
-                                                    <form class="flex justify-end" :action="webhook.delete_url" method="post" @submit="confirmSubmit($event, 'Remover este webhook?')">
+                                                    <form v-if="permissions.manage_integrations" class="flex justify-end" :action="webhook.delete_url" method="post" @submit="confirmSubmit($event, 'Remover este webhook?')">
                                                         <input name="_token" type="hidden" :value="csrfToken">
                                                         <input name="_method" type="hidden" value="delete">
                                                         <button class="kt-btn kt-btn-sm kt-btn-icon kt-btn-ghost" type="submit" aria-label="Remover webhook">
@@ -781,7 +876,7 @@ function progressWidth(item) {
                             <div class="kt-card-header">
                                 <h3 class="kt-card-title">Novo webhook</h3>
                             </div>
-                            <form class="kt-card-content p-5 grid gap-4" :action="routeGroup('webhooks').store" method="post">
+                            <form v-if="permissions.manage_integrations" class="kt-card-content p-5 grid gap-4" :action="routeGroup('webhooks').store" method="post">
                                 <input name="_token" type="hidden" :value="csrfToken">
                                 <div class="grid gap-1">
                                     <label class="kt-form-label" for="name">Nome</label>
@@ -807,6 +902,7 @@ function progressWidth(item) {
                                 </div>
                                 <button class="kt-btn kt-btn-primary justify-center" type="submit">Criar webhook</button>
                             </form>
+                            <div v-else class="kt-card-content p-5 text-sm text-secondary-foreground">Somente owner, admin ou developer pode criar webhooks.</div>
                         </div>
                     </section>
 
@@ -837,7 +933,7 @@ function progressWidth(item) {
                                                 <td>{{ apiKey.abilities_label }}</td>
                                                 <td>{{ apiKey.last_used_human || '-' }}</td>
                                                 <td>
-                                                    <form class="flex justify-end" :action="apiKey.delete_url" method="post" @submit="confirmSubmit($event, 'Revogar esta chave de API?')">
+                                                    <form v-if="permissions.manage_integrations" class="flex justify-end" :action="apiKey.delete_url" method="post" @submit="confirmSubmit($event, 'Revogar esta chave de API?')">
                                                         <input name="_token" type="hidden" :value="csrfToken">
                                                         <input name="_method" type="hidden" value="delete">
                                                         <button class="kt-btn kt-btn-sm kt-btn-icon kt-btn-ghost" type="submit" aria-label="Remover chave">
@@ -859,7 +955,7 @@ function progressWidth(item) {
                             <div class="kt-card-header">
                                 <h3 class="kt-card-title">Nova chave</h3>
                             </div>
-                            <form class="kt-card-content p-5 grid gap-4" :action="routeGroup('apiKeys').store" method="post">
+                            <form v-if="permissions.manage_integrations" class="kt-card-content p-5 grid gap-4" :action="routeGroup('apiKeys').store" method="post">
                                 <input name="_token" type="hidden" :value="csrfToken">
                                 <div class="grid gap-1">
                                     <label class="kt-form-label" for="name">Nome</label>
@@ -867,6 +963,7 @@ function progressWidth(item) {
                                 </div>
                                 <button class="kt-btn kt-btn-primary justify-center" type="submit">Emitir chave</button>
                             </form>
+                            <div v-else class="kt-card-content p-5 text-sm text-secondary-foreground">Seu perfil não pode emitir chaves de API.</div>
                         </div>
                     </section>
 
@@ -906,9 +1003,9 @@ function progressWidth(item) {
 
                         <div class="kt-card">
                             <div class="kt-card-header">
-                                <h3 class="kt-card-title">Adicionar membro</h3>
+                                <h3 class="kt-card-title">Convidar membro</h3>
                             </div>
-                            <form class="kt-card-content p-5 grid gap-4" :action="routeGroup('team').store" method="post">
+                            <form v-if="permissions.manage_team" class="kt-card-content p-5 grid gap-4" :action="routeGroup('team').store" method="post">
                                 <input name="_token" type="hidden" :value="csrfToken">
                                 <div class="grid gap-1">
                                     <label class="kt-form-label" for="email">Email</label>
@@ -923,8 +1020,25 @@ function progressWidth(item) {
                                         <option value="member">Membro</option>
                                     </select>
                                 </div>
-                                <button class="kt-btn kt-btn-primary justify-center" type="submit">Adicionar</button>
+                                <button class="kt-btn kt-btn-primary justify-center" type="submit">Enviar convite</button>
                             </form>
+                            <div v-else class="kt-card-content p-5 text-sm text-secondary-foreground">Somente owner ou admin pode convidar membros.</div>
+                        </div>
+
+                        <div class="kt-card waflow-span-3">
+                            <div class="kt-card-header"><h3 class="kt-card-title">Convites</h3></div>
+                            <div class="kt-card-table"><div class="waflow-table-wrap"><table class="kt-table">
+                                <thead><tr><th>Email</th><th>Papel</th><th>Status</th><th>Expira em</th><th class="text-end">Ações</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="invitation in pageData.invitations || []" :key="invitation.uuid">
+                                        <td>{{ invitation.email }}</td><td>{{ invitation.role }}</td>
+                                        <td><span class="kt-badge kt-badge-light" :class="`kt-badge-${badgeVariant(invitation.status)}`">{{ invitation.status }}</span></td>
+                                        <td>{{ invitation.expires_at_label }}</td>
+                                        <td><form v-if="permissions.manage_team && invitation.status === 'pending'" class="flex justify-end" :action="invitation.revoke_url" method="post"><input name="_token" type="hidden" :value="csrfToken"><input name="_method" type="hidden" value="delete"><button class="kt-btn kt-btn-sm kt-btn-outline" type="submit">Revogar</button></form></td>
+                                    </tr>
+                                    <tr v-if="!pageData.invitations?.length"><td colspan="5" class="text-center text-secondary-foreground py-8">Nenhum convite enviado.</td></tr>
+                                </tbody>
+                            </table></div></div>
                         </div>
                     </section>
 
@@ -973,6 +1087,40 @@ function progressWidth(item) {
                                 </div>
                             </div>
                         </div>
+
+                        <div class="waflow-grid waflow-grid-3 mt-5">
+                            <div class="kt-card">
+                                <div class="kt-card-header"><h3 class="kt-card-title">Novo checkout</h3></div>
+                                <form v-if="permissions.manage_billing" class="kt-card-content p-5 grid gap-4" :action="routeGroup('billing').checkout" method="post">
+                                    <input name="_token" type="hidden" :value="csrfToken">
+                                    <div class="grid gap-1"><label class="kt-form-label">Plano</label><select class="kt-input" name="plan_slug" required><option v-for="availablePlan in pageData.plans || []" :key="availablePlan.slug" :value="availablePlan.slug">{{ availablePlan.name }} — {{ availablePlan.monthly_price_label }}/mês</option></select></div>
+                                    <div class="grid gap-1"><label class="kt-form-label">Pagamento</label><select class="kt-input" name="payment_method" required><option value="credit_card">Cartão de crédito</option><option value="debit_card">Cartão de débito</option><option value="pix">Pix</option></select></div>
+                                    <div class="text-xs text-secondary-foreground">Integração: {{ pageData.provider_status === 'configured' ? 'provedor configurado' : 'provedor ainda será escolhido' }}</div>
+                                    <button class="kt-btn kt-btn-primary justify-center" type="submit">Preparar checkout</button>
+                                </form>
+                                <div v-else class="kt-card-content p-5 text-sm text-secondary-foreground">Somente owner ou admin pode alterar o plano.</div>
+                            </div>
+
+                            <div class="kt-card waflow-span-2">
+                                <div class="kt-card-header"><h3 class="kt-card-title">Checkouts recentes</h3></div>
+                                <div class="kt-card-table"><div class="waflow-table-wrap"><table class="kt-table">
+                                    <thead><tr><th>Plano</th><th>Forma</th><th>Valor</th><th>Status</th><th>Data</th></tr></thead>
+                                    <tbody><tr v-for="checkout in pageData.checkouts || []" :key="checkout.uuid"><td>{{ checkout.plan }}</td><td>{{ checkout.payment_method }}</td><td>{{ checkout.amount_label }}</td><td><span class="kt-badge kt-badge-light" :class="`kt-badge-${badgeVariant(checkout.status)}`">{{ checkout.status }}</span></td><td>{{ checkout.created_at_label }}</td></tr><tr v-if="!pageData.checkouts?.length"><td colspan="5" class="text-center text-secondary-foreground py-8">Nenhum checkout iniciado.</td></tr></tbody>
+                                </table></div></div>
+                            </div>
+                        </div>
+
+                        <div class="kt-card mt-5">
+                            <div class="kt-card-header">
+                                <h3 class="kt-card-title">Faturas e renovação</h3>
+                                <form v-if="permissions.manage_billing && workspace.cancel_at_period_end" :action="routeGroup('billing').resume" method="post"><input name="_token" type="hidden" :value="csrfToken"><button class="kt-btn kt-btn-sm kt-btn-primary" type="submit">Reativar renovação</button></form>
+                                <form v-else-if="permissions.manage_billing" :action="routeGroup('billing').cancel" method="post" @submit="confirmSubmit($event, 'Cancelar a renovação ao fim do ciclo?')"><input name="_token" type="hidden" :value="csrfToken"><button class="kt-btn kt-btn-sm kt-btn-outline" type="submit">Cancelar renovação</button></form>
+                            </div>
+                            <div class="kt-card-table"><div class="waflow-table-wrap"><table class="kt-table">
+                                <thead><tr><th>Número</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead>
+                                <tbody><tr v-for="invoice in pageData.invoices || []" :key="invoice.uuid"><td>{{ invoice.number }}</td><td>{{ invoice.amount_label }}</td><td>{{ invoice.due_at_label || '-' }}</td><td><span class="kt-badge kt-badge-light" :class="`kt-badge-${badgeVariant(invoice.status)}`">{{ invoice.status }}</span></td></tr><tr v-if="!pageData.invoices?.length"><td colspan="4" class="text-center text-secondary-foreground py-8">As faturas aparecerão aqui após a ativação do provedor.</td></tr></tbody>
+                            </table></div></div>
+                        </div>
                     </section>
 
                     <section v-else-if="page === 'settings'" class="waflow-grid waflow-grid-3">
@@ -980,7 +1128,7 @@ function progressWidth(item) {
                             <div class="kt-card-header">
                                 <h3 class="kt-card-title">Workspace</h3>
                             </div>
-                            <form class="kt-card-content p-5 grid gap-4" :action="routeGroup('settings').update" method="post">
+                            <form v-if="permissions.manage_settings" class="kt-card-content p-5 grid gap-4" :action="routeGroup('settings').update" method="post">
                                 <input name="_token" type="hidden" :value="csrfToken">
                                 <input name="_method" type="hidden" value="patch">
                                 <div class="grid gap-1">
@@ -995,6 +1143,7 @@ function progressWidth(item) {
                                     <button class="kt-btn kt-btn-primary" type="submit">Salvar alterações</button>
                                 </div>
                             </form>
+                            <div v-else class="kt-card-content p-5 text-sm text-secondary-foreground">Somente owner ou admin pode alterar o workspace.</div>
                         </div>
 
                         <div class="kt-card">

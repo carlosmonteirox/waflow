@@ -1,0 +1,508 @@
+openapi: 3.1.0
+info:
+  title: Waflow API
+  version: 1.0.0
+  summary: API multi-tenant para automação e mensageria WhatsApp.
+  description: |
+    Contrato público do Waflow. Todos os recursos autenticados são isolados pelo
+    workspace da chave utilizada. Chaves podem possuir `*` ou abilities granulares.
+    Operações assíncronas retornam HTTP 202. Erros usam sempre `error.code`,
+    `error.message`, `error.details` e `meta.request_id`.
+servers:
+  - url: https://your-waflow-host/api/v1
+    description: Produção
+  - url: http://localhost:8080/api/v1
+    description: Desenvolvimento
+tags:
+  - name: System
+  - name: Authentication
+  - name: Workspace
+  - name: Billing
+  - name: Instances
+  - name: Messages
+  - name: Contacts
+  - name: Automations
+  - name: Portals
+  - name: Webhooks
+  - name: API Keys
+  - name: Team
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: health
+      security: []
+      summary: Verifica banco e runtime OpenWA.
+      responses:
+        '200': {description: Plataforma pronta, content: {application/json: {schema: {$ref: '#/components/schemas/Health'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /plans:
+    get:
+      tags: [Billing]
+      operationId: listPlans
+      security: []
+      summary: Lista planos e limites disponíveis.
+      responses:
+        '200': {$ref: '#/components/responses/Collection'}
+  /auth/register:
+    post:
+      tags: [Authentication]
+      operationId: register
+      security: []
+      summary: Cria usuário, workspace, trial e chave inicial.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, password_confirmation]
+              properties:
+                name: {type: string, maxLength: 120}
+                email: {type: string, format: email}
+                password: {type: string, format: password}
+                password_confirmation: {type: string, format: password}
+                workspace_name: {type: string, maxLength: 120}
+                site_url: {type: string, format: uri}
+                portal_name: {type: string}
+                device_fingerprint: {type: string}
+      responses:
+        '201': {$ref: '#/components/responses/ResourceCreated'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /auth/email/verification-notification:
+    post:
+      tags: [Authentication]
+      operationId: resendEmailVerification
+      responses:
+        '202': {description: Verificação enviada.}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /workspace:
+    get:
+      tags: [Workspace]
+      operationId: getWorkspace
+      responses:
+        '200': {$ref: '#/components/responses/Resource'}
+    patch:
+      tags: [Workspace]
+      operationId: updateWorkspace
+      requestBody: {$ref: '#/components/requestBodies/WorkspaceUpdate'}
+      responses:
+        '200': {$ref: '#/components/responses/Resource'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /billing/usage:
+    get:
+      tags: [Billing]
+      operationId: billingUsage
+      responses:
+        '200': {$ref: '#/components/responses/Resource'}
+  /billing/summary:
+    get:
+      tags: [Billing]
+      operationId: billingSummary
+      responses:
+        '200': {$ref: '#/components/responses/Resource'}
+  /billing/checkouts:
+    get:
+      tags: [Billing]
+      operationId: listCheckouts
+      parameters: [{$ref: '#/components/parameters/PerPage'}, {$ref: '#/components/parameters/Page'}]
+      responses:
+        '200': {$ref: '#/components/responses/Paginated'}
+    post:
+      tags: [Billing]
+      operationId: createCheckout
+      summary: Prepara checkout para cartão de crédito, débito ou Pix.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_slug, payment_method]
+              properties:
+                plan_slug: {type: string, example: growth}
+                payment_method: {type: string, enum: [credit_card, debit_card, pix]}
+      responses:
+        '201': {$ref: '#/components/responses/ResourceCreated'}
+        '202': {description: Checkout preparado; provedor ainda não configurado, content: {application/json: {schema: {$ref: '#/components/schemas/ResourceEnvelope'}}}}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /billing/checkouts/{checkout}:
+    parameters: [{$ref: '#/components/parameters/Checkout'}]
+    get:
+      tags: [Billing]
+      operationId: getCheckout
+      responses: {'200': {$ref: '#/components/responses/Resource'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /billing/checkouts/{checkout}/cancel:
+    parameters: [{$ref: '#/components/parameters/Checkout'}]
+    post:
+      tags: [Billing]
+      operationId: cancelCheckout
+      responses: {'200': {$ref: '#/components/responses/Resource'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /billing/invoices:
+    get:
+      tags: [Billing]
+      operationId: listInvoices
+      parameters: [{$ref: '#/components/parameters/PerPage'}, {$ref: '#/components/parameters/Page'}]
+      responses: {'200': {$ref: '#/components/responses/Paginated'}}
+  /billing/invoices/{invoice}:
+    parameters: [{$ref: '#/components/parameters/Invoice'}]
+    get:
+      tags: [Billing]
+      operationId: getInvoice
+      responses: {'200': {$ref: '#/components/responses/Resource'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /billing/payments:
+    get:
+      tags: [Billing]
+      operationId: listPayments
+      parameters: [{$ref: '#/components/parameters/PerPage'}, {$ref: '#/components/parameters/Page'}]
+      responses: {'200': {$ref: '#/components/responses/Paginated'}}
+  /billing/subscription/cancel:
+    post:
+      tags: [Billing]
+      operationId: cancelSubscription
+      requestBody:
+        content: {application/json: {schema: {type: object, properties: {at_period_end: {type: boolean, default: true}}}}}
+      responses: {'200': {$ref: '#/components/responses/Resource'}}
+  /billing/subscription/resume:
+    post:
+      tags: [Billing]
+      operationId: resumeSubscription
+      responses: {'200': {$ref: '#/components/responses/Resource'}}
+  /instances:
+    get:
+      tags: [Instances]
+      operationId: listInstances
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PerPage'}
+        - {name: status, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Search'}
+      responses: {'200': {$ref: '#/components/responses/Paginated'}}
+    post:
+      tags: [Instances]
+      operationId: createInstance
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [name], properties: {name: {type: string, maxLength: 120}}}}}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}, '429': {$ref: '#/components/responses/RateLimited'}}
+  /instances/{instance}:
+    parameters: [{$ref: '#/components/parameters/Instance'}]
+    get:
+      tags: [Instances]
+      operationId: getInstance
+      responses: {'200': {$ref: '#/components/responses/Resource'}, '404': {$ref: '#/components/responses/NotFound'}}
+    patch:
+      tags: [Instances]
+      operationId: updateInstance
+      requestBody:
+        content: {application/json: {schema: {type: object, properties: {name: {type: string, maxLength: 120}}}}}
+      responses: {'200': {$ref: '#/components/responses/Resource'}}
+    delete:
+      tags: [Instances]
+      operationId: deleteInstance
+      responses: {'204': {description: Instância removida.}}
+  /instances/{instance}/connect:
+    parameters: [{$ref: '#/components/parameters/Instance'}]
+    post:
+      tags: [Instances]
+      operationId: connectInstance
+      responses: {'200': {$ref: '#/components/responses/Resource'}, '502': {$ref: '#/components/responses/RuntimeError'}}
+  /instances/{instance}/disconnect:
+    parameters: [{$ref: '#/components/parameters/Instance'}]
+    post:
+      tags: [Instances]
+      operationId: disconnectInstance
+      responses: {'200': {$ref: '#/components/responses/Resource'}}
+  /instances/{instance}/status:
+    parameters: [{$ref: '#/components/parameters/Instance'}]
+    get:
+      tags: [Instances]
+      operationId: getInstanceStatus
+      responses: {'200': {$ref: '#/components/responses/Resource'}}
+  /instances/{instance}/qr:
+    parameters: [{$ref: '#/components/parameters/Instance'}]
+    get:
+      tags: [Instances]
+      operationId: getInstanceQr
+      responses: {'200': {$ref: '#/components/responses/Resource'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /instances/{instance}/groups:
+    parameters: [{$ref: '#/components/parameters/Instance'}]
+    get: {tags: [Instances], operationId: listInstanceGroups, responses: {'200': {$ref: '#/components/responses/Collection'}}}
+  /instances/{instance}/channels:
+    parameters: [{$ref: '#/components/parameters/Instance'}]
+    get: {tags: [Instances], operationId: listInstanceChannels, responses: {'200': {$ref: '#/components/responses/Collection'}}}
+  /instances/{instance}/remote-contacts:
+    parameters: [{$ref: '#/components/parameters/Instance'}]
+    get: {tags: [Instances], operationId: listInstanceContacts, responses: {'200': {$ref: '#/components/responses/Collection'}}}
+  /messages:
+    get:
+      tags: [Messages]
+      operationId: listMessages
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PerPage'}
+        - {$ref: '#/components/parameters/Search'}
+        - {name: status, in: query, schema: {type: string}}
+        - {name: direction, in: query, schema: {type: string, enum: [inbound, outbound]}}
+        - {name: instance_uuid, in: query, schema: {type: string, format: uuid}}
+        - {name: date_from, in: query, schema: {type: string, format: date-time}}
+        - {name: date_to, in: query, schema: {type: string, format: date-time}}
+      responses: {'200': {$ref: '#/components/responses/Paginated'}}
+    post:
+      tags: [Messages]
+      operationId: sendMessage
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {$ref: '#/components/requestBodies/Message'}
+      responses:
+        '202': {description: Mensagem aceita na fila, content: {application/json: {schema: {$ref: '#/components/schemas/ResourceEnvelope'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /messages/bulk:
+    post:
+      tags: [Messages]
+      operationId: sendBulkMessages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages]
+              properties:
+                messages: {type: array, minItems: 1, maxItems: 100, items: {$ref: '#/components/schemas/MessageRequest'}}
+      responses: {'202': {description: Lote aceito.}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /messages/{message}:
+    parameters: [{$ref: '#/components/parameters/Message'}]
+    get: {tags: [Messages], operationId: getMessage, responses: {'200': {$ref: '#/components/responses/Resource'}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /contacts:
+    get:
+      tags: [Contacts]
+      operationId: listContacts
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PerPage'}, {$ref: '#/components/parameters/Search'}]
+      responses: {'200': {$ref: '#/components/responses/Paginated'}}
+    post:
+      tags: [Contacts]
+      operationId: createContact
+      requestBody: {$ref: '#/components/requestBodies/Contact'}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /contacts/{contact}:
+    parameters: [{$ref: '#/components/parameters/Contact'}]
+    get: {tags: [Contacts], operationId: getContact, responses: {'200': {$ref: '#/components/responses/Resource'}}}
+    patch: {tags: [Contacts], operationId: updateContact, requestBody: {$ref: '#/components/requestBodies/Contact'}, responses: {'200': {$ref: '#/components/responses/Resource'}}}
+    delete: {tags: [Contacts], operationId: deleteContact, responses: {'204': {description: Contato removido.}}}
+  /flows:
+    get:
+      tags: [Automations]
+      operationId: listFlows
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PerPage'}, {$ref: '#/components/parameters/Search'}, {name: status, in: query, schema: {type: string, enum: [draft, active, paused]}}, {name: trigger_type, in: query, schema: {type: string}}]
+      responses: {'200': {$ref: '#/components/responses/Paginated'}}
+    post:
+      tags: [Automations]
+      operationId: createFlow
+      requestBody: {$ref: '#/components/requestBodies/Flow'}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /flows/{flow}:
+    parameters: [{$ref: '#/components/parameters/Flow'}]
+    get: {tags: [Automations], operationId: getFlow, responses: {'200': {$ref: '#/components/responses/Resource'}}}
+    patch: {tags: [Automations], operationId: updateFlow, requestBody: {$ref: '#/components/requestBodies/Flow'}, responses: {'200': {$ref: '#/components/responses/Resource'}}}
+    delete: {tags: [Automations], operationId: deleteFlow, responses: {'204': {description: Fluxo removido.}}}
+  /flows/{flow}/executions:
+    parameters: [{$ref: '#/components/parameters/Flow'}]
+    get: {tags: [Automations], operationId: listFlowExecutions, responses: {'200': {$ref: '#/components/responses/Paginated'}}}
+  /flows/{flow}/test:
+    parameters: [{$ref: '#/components/parameters/Flow'}]
+    post:
+      tags: [Automations]
+      operationId: testFlow
+      requestBody: {content: {application/json: {schema: {type: object, properties: {payload: {type: object, additionalProperties: true}}}}}}
+      responses: {'202': {description: Execução de teste enfileirada.}}
+  /portals:
+    get: {tags: [Portals], operationId: listPortals, responses: {'200': {$ref: '#/components/responses/Paginated'}}}
+    post:
+      tags: [Portals]
+      operationId: createPortal
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name, url], properties: {name: {type: string}, url: {type: string, format: uri}}}}}}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+  /portals/{portal}:
+    parameters: [{$ref: '#/components/parameters/Portal'}]
+    get: {tags: [Portals], operationId: getPortal, responses: {'200': {$ref: '#/components/responses/Resource'}}}
+    patch: {tags: [Portals], operationId: updatePortal, responses: {'200': {$ref: '#/components/responses/Resource'}}}
+    delete: {tags: [Portals], operationId: deletePortal, responses: {'204': {description: Portal removido.}}}
+  /portals/{portal}/verify:
+    parameters: [{$ref: '#/components/parameters/Portal'}]
+    post:
+      tags: [Portals]
+      operationId: verifyPortal
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [verification_token], properties: {verification_token: {type: string}}}}}}
+      responses: {'200': {$ref: '#/components/responses/Resource'}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /webhooks:
+    get: {tags: [Webhooks], operationId: listWebhooks, responses: {'200': {$ref: '#/components/responses/Paginated'}}}
+    post:
+      tags: [Webhooks]
+      operationId: createWebhook
+      requestBody: {$ref: '#/components/requestBodies/Webhook'}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /webhooks/{webhook}:
+    parameters: [{$ref: '#/components/parameters/Webhook'}]
+    get: {tags: [Webhooks], operationId: getWebhook, responses: {'200': {$ref: '#/components/responses/Resource'}}}
+    patch: {tags: [Webhooks], operationId: updateWebhook, requestBody: {$ref: '#/components/requestBodies/Webhook'}, responses: {'200': {$ref: '#/components/responses/Resource'}}}
+    delete: {tags: [Webhooks], operationId: deleteWebhook, responses: {'204': {description: Webhook removido.}}}
+  /webhooks/{webhook}/test:
+    parameters: [{$ref: '#/components/parameters/Webhook'}]
+    post: {tags: [Webhooks], operationId: testWebhook, responses: {'202': {description: Entrega de teste enfileirada.}}}
+  /api-keys:
+    get: {tags: [API Keys], operationId: listApiKeys, responses: {'200': {$ref: '#/components/responses/Paginated'}}}
+    post:
+      tags: [API Keys]
+      operationId: createApiKey
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name], properties: {name: {type: string}, abilities: {type: array, items: {type: string}}}}}}}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+  /api-keys/{apiKey}:
+    parameters: [{$ref: '#/components/parameters/ApiKey'}]
+    delete: {tags: [API Keys], operationId: revokeApiKey, responses: {'204': {description: Chave revogada.}}}
+  /team/members:
+    get:
+      tags: [Team]
+      operationId: listTeamMembers
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PerPage'}, {$ref: '#/components/parameters/Search'}, {name: role, in: query, schema: {type: string}}, {name: status, in: query, schema: {type: string}}]
+      responses: {'200': {$ref: '#/components/responses/Paginated'}}
+  /team/members/{member}:
+    parameters: [{$ref: '#/components/parameters/Member'}]
+    patch:
+      tags: [Team]
+      operationId: updateTeamMember
+      requestBody: {content: {application/json: {schema: {type: object, properties: {role: {type: string, enum: [admin, support, developer, member]}, status: {type: string, enum: [active, suspended]}}}}}}
+      responses: {'200': {$ref: '#/components/responses/Resource'}, '409': {$ref: '#/components/responses/Conflict'}}
+    delete: {tags: [Team], operationId: removeTeamMember, responses: {'204': {description: Membro removido.}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /team/invitations:
+    get: {tags: [Team], operationId: listTeamInvitations, responses: {'200': {$ref: '#/components/responses/Paginated'}}}
+    post:
+      tags: [Team]
+      operationId: inviteTeamMember
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [email, role], properties: {email: {type: string, format: email}, role: {type: string, enum: [admin, support, developer, member]}}}}}}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /team/invitations/{invitation}/resend:
+    parameters: [{$ref: '#/components/parameters/Invitation'}]
+    post: {tags: [Team], operationId: resendTeamInvitation, responses: {'200': {$ref: '#/components/responses/Resource'}}}
+  /team/invitations/{invitation}:
+    parameters: [{$ref: '#/components/parameters/Invitation'}]
+    delete: {tags: [Team], operationId: revokeTeamInvitation, responses: {'200': {$ref: '#/components/responses/Resource'}}}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: waflow_API_key
+  parameters:
+    Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+    PerPage: {name: per_page, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+    Search: {name: search, in: query, schema: {type: string, maxLength: 255}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}}
+    Instance: {name: instance, in: path, required: true, schema: {type: string, format: uuid}}
+    Message: {name: message, in: path, required: true, schema: {type: string, format: uuid}}
+    Contact: {name: contact, in: path, required: true, schema: {type: string, format: uuid}}
+    Flow: {name: flow, in: path, required: true, schema: {type: string, format: uuid}}
+    Portal: {name: portal, in: path, required: true, schema: {type: string, format: uuid}}
+    Webhook: {name: webhook, in: path, required: true, schema: {type: string, format: uuid}}
+    Checkout: {name: checkout, in: path, required: true, schema: {type: string, format: uuid}}
+    Invoice: {name: invoice, in: path, required: true, schema: {type: string, format: uuid}}
+    ApiKey: {name: apiKey, in: path, required: true, schema: {type: integer}}
+    Member: {name: member, in: path, required: true, schema: {type: integer}}
+    Invitation: {name: invitation, in: path, required: true, schema: {type: string, format: uuid}}
+  requestBodies:
+    WorkspaceUpdate:
+      content: {application/json: {schema: {type: object, properties: {name: {type: string, maxLength: 120}, timezone: {type: string, maxLength: 80}}}}}
+    Contact:
+      content: {application/json: {schema: {type: object, properties: {name: {type: string}, phone_number: {type: string}, wa_id: {type: string}, metadata: {type: object}}}}}
+    Message:
+      required: true
+      content: {application/json: {schema: {$ref: '#/components/schemas/MessageRequest'}}}
+    Flow:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              name: {type: string}
+              trigger_type: {type: string, enum: [message_received, message_failed, instance_connected]}
+              status: {type: string, enum: [draft, active, paused]}
+              steps: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/AutomationStep'}}
+    Webhook:
+      required: true
+      content: {application/json: {schema: {type: object, properties: {name: {type: string}, url: {type: string, format: uri}, events: {type: array, items: {type: string}}, status: {type: string, enum: [active, paused]}}}}}
+  responses:
+    Resource: {description: Recurso, content: {application/json: {schema: {$ref: '#/components/schemas/ResourceEnvelope'}}}}
+    ResourceCreated: {description: Recurso criado, content: {application/json: {schema: {$ref: '#/components/schemas/ResourceEnvelope'}}}}
+    Collection: {description: Coleção, content: {application/json: {schema: {$ref: '#/components/schemas/CollectionEnvelope'}}}}
+    Paginated: {description: Coleção paginada, content: {application/json: {schema: {$ref: '#/components/schemas/PaginatedEnvelope'}}}}
+    ValidationError: {description: Dados inválidos, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    NotFound: {description: Recurso não encontrado, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    Conflict: {description: Conflito de estado, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    RateLimited: {description: Limite excedido, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    RuntimeError: {description: Runtime do WhatsApp indisponível, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    ServiceUnavailable: {description: Dependência indisponível, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  schemas:
+    ResourceEnvelope:
+      type: object
+      required: [data]
+      properties: {data: {type: object, additionalProperties: true}}
+    CollectionEnvelope:
+      type: object
+      required: [data]
+      properties: {data: {type: array, items: {type: object, additionalProperties: true}}}
+    PaginatedEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data: {type: array, items: {type: object, additionalProperties: true}}
+        meta:
+          type: object
+          properties:
+            pagination:
+              type: object
+              properties: {current_page: {type: integer}, per_page: {type: integer}, total: {type: integer}, last_page: {type: integer}, from: {type: [integer, 'null']}, to: {type: [integer, 'null']}}
+        links: {type: object, properties: {first: {type: string}, last: {type: string}, prev: {type: [string, 'null']}, next: {type: [string, 'null']}}}
+    ErrorEnvelope:
+      type: object
+      required: [message, code, error, meta]
+      properties:
+        message: {type: string}
+        code: {type: string}
+        error:
+          type: object
+          required: [code, message]
+          properties: {code: {type: string}, message: {type: string}, details: {type: [object, 'null'], additionalProperties: true}}
+        meta: {type: object, properties: {request_id: {type: [string, 'null']}}}
+    Health:
+      type: object
+      properties: {status: {type: string, enum: [ok, degraded]}, service: {type: string}, timestamp: {type: string, format: date-time}, checks: {type: object}}
+    MessageRequest:
+      type: object
+      required: [instance_uuid, to, type]
+      properties:
+        instance_uuid: {type: string, format: uuid}
+        to: {type: string, description: Número ou chat ID explícito.}
+        type: {type: string, enum: [text, image, video, audio, document, sticker, location, contact, poll]}
+        text: {type: string, maxLength: 4096}
+        url: {type: string, format: uri}
+        base64: {type: string}
+        caption: {type: string}
+        latitude: {type: number}
+        longitude: {type: number}
+        contact_name: {type: string}
+        contact_number: {type: string}
+        name: {type: string, description: Nome da enquete.}
+        options: {type: array, items: {type: string}}
+    AutomationStep:
+      oneOf:
+        - type: object
+          required: [type, field, operator]
+          properties: {type: {const: condition}, field: {type: string}, operator: {type: string, enum: [equals, not_equals, contains, starts_with, ends_with, exists, in]}, value: {}}
+        - type: object
+          required: [type, action]
+          properties: {type: {const: action}, action: {type: string, enum: [send_message, dispatch_webhook, set_context]}, instance_uuid: {type: string}, to: {type: string}, text: {type: string}, event: {type: string}, key: {type: string}, value: {}}

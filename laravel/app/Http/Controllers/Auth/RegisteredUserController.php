@@ -19,6 +19,7 @@ class RegisteredUserController extends Controller
 
     public function store(Request $request, RegistrationService $registration): RedirectResponse
     {
+        $request->merge(['email' => mb_strtolower(trim((string) $request->input('email')))]);
         $attributes = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],

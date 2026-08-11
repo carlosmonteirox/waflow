@@ -16,7 +16,8 @@ ARTISAN := $(COMPOSE) exec -T laravel php artisan
 
 .PHONY: help init env up start stop down restart build rebuild ps logs shell \
 	artisan migrate seed queue-restart composer-install npm-install npm-dev \
-	npm-build test pint lint quality health compose-config clean-build destroy
+	npm-build test pint lint quality health compose-config clean-build destroy \
+	e2e-live
 
 help: ## Lista os comandos disponíveis
 	@printf '%s\n' "$(APP_NAME) make targets:"
@@ -96,6 +97,9 @@ quality: npm-build test lint compose-config ## Executa validação principal do 
 
 health: ## Consulta health check público
 	curl -fsS http://localhost:$(HTTP_PORT)/api/v1/health
+
+e2e-live: ## Envia mensagem real e testa concorrência (requer variáveis WAFLOW_E2E_*)
+	./infra/scripts/e2e-live.sh
 
 compose-config: init ## Valida a configuração Docker Compose
 	$(COMPOSE) config --quiet

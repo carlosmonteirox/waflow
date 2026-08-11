@@ -32,12 +32,15 @@ x-laravel-environment: &laravel-environment
   OPENWA_API_KEY: ${OPENWA_MASTER_KEY:?Run ./infra/scripts/init-env.sh before starting Waflow}
   OPENWA_WEBHOOK_URL: http://gateway/api/v1/internal/openwa/events
   OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:?Run ./infra/scripts/init-env.sh before starting Waflow}
+  BILLING_DRIVER: ${BILLING_DRIVER:-pending}
+  BILLING_CURRENCY: ${BILLING_CURRENCY:-BRL}
+  BILLING_CHECKOUT_TTL_MINUTES: ${BILLING_CHECKOUT_TTL_MINUTES:-30}
   MAIL_MAILER: ${MAIL_MAILER:-log}
   MAIL_HOST: ${MAIL_HOST:-}
   MAIL_PORT: ${MAIL_PORT:-587}
   MAIL_USERNAME: ${MAIL_USERNAME:-}
   MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-  MAIL_ENCRYPTION: ${MAIL_ENCRYPTION:-tls}
+  MAIL_SCHEME: ${MAIL_SCHEME:-smtp}
   MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-no-reply@waflow.local}
   MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Waflow}
 

@@ -8,6 +8,7 @@ use App\Models\WhatsAppInstance;
 use App\Services\InstanceManager;
 use App\Services\OpenWaClient;
 use App\Services\UsageLimiter;
+use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -18,20 +19,35 @@ class InstanceController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        return response()->json(['data' => $this->workspace($request)->instances()->latest()->get()]);
+        $attributes = $request->validate([
+            'status' => ['nullable', 'string', 'max:40'],
+            'search' => ['nullable', 'string', 'max:120'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+        $query = $this->workspace($request)->instances()->latest();
+        $query->when(filled($attributes['status'] ?? null), fn ($query) => $query->where('status', $attributes['status']));
+        $query->when(filled($attributes['search'] ?? null), function ($query) use ($attributes): void {
+            $search = '%'.$attributes['search'].'%';
+            $query->where(fn ($query) => $query->where('name', 'like', $search)->orWhere('phone_number', 'like', $search));
+        });
+
+        return ApiResponse::paginated($query->paginate(ApiResponse::perPage($request)));
     }
 
     public function store(Request $request, UsageLimiter $limiter, InstanceManager $manager): JsonResponse
     {
         $workspace = $this->workspace($request);
-        $limiter->ensureInstances($workspace);
         $attributes = $request->validate(['name' => ['required', 'string', 'max:120']]);
 
-        $instance = $workspace->instances()->create([
-            'name' => $attributes['name'],
-            'session_name' => Str::slug($workspace->slug.' '.$attributes['name']).'-'.Str::lower(Str::random(8)),
-            'status' => 'provisioning',
-        ]);
+        $instance = $limiter->serialized($workspace, function () use ($workspace, $limiter, $attributes): WhatsAppInstance {
+            $limiter->ensureInstances($workspace);
+
+            return $workspace->instances()->create([
+                'name' => $attributes['name'],
+                'session_name' => Str::slug($workspace->slug.' '.$attributes['name']).'-'.Str::lower(Str::random(8)),
+                'status' => 'provisioning',
+            ]);
+        });
 
         return response()->json(['data' => $manager->provision($instance)], 201);
     }

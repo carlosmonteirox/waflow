@@ -11,6 +11,8 @@
             'passwordRequest' => route('password.request'),
             'passwordEmail' => route('password.email'),
             'passwordStore' => route('password.store'),
+            'twoFactorStore' => route('two-factor.store'),
+            'twoFactorResend' => route('two-factor.resend'),
         ],
         'old' => [
             'name' => old('name'),

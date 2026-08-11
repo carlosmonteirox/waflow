@@ -6,29 +6,31 @@ use App\Http\Controllers\Controller;
 use App\Models\InboundEvent;
 use App\Models\MessageEvent;
 use App\Models\WhatsAppInstance;
+use App\Services\AutomationExecutor;
 use App\Services\OpenWaClient;
 use App\Services\TrialAbuseService;
 use App\Services\WorkspaceWebhookDispatcher;
+use App\Support\ApiResponse;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class OpenWaEventController extends Controller
 {
-    public function __invoke(Request $request, WorkspaceWebhookDispatcher $dispatcher, TrialAbuseService $abuse, OpenWaClient $openwa): JsonResponse
+    public function __invoke(Request $request, WorkspaceWebhookDispatcher $dispatcher, TrialAbuseService $abuse, OpenWaClient $openwa, AutomationExecutor $automations): JsonResponse
     {
         $rawBody = $request->getContent();
         $expected = 'sha256='.hash_hmac('sha256', $rawBody, (string) config('services.openwa.webhook_secret'));
         $provided = (string) $request->header('X-OpenWA-Signature');
         if (! $provided || ! hash_equals($expected, $provided)) {
-            return response()->json(['message' => 'Assinatura inválida.'], 401);
+            return ApiResponse::error($request, 'invalid_signature', 'Assinatura inválida.', 401);
         }
 
         $payload = $request->json()->all();
         $eventName = (string) ($payload['event'] ?? $request->header('X-OpenWA-Event', 'unknown'));
         $idempotencyKey = (string) ($payload['idempotencyKey'] ?? $request->header('X-OpenWA-Idempotency-Key'));
         if ($idempotencyKey === '') {
-            return response()->json(['message' => 'Chave de idempotência ausente.'], 422);
+            return ApiResponse::error($request, 'idempotency_key_missing', 'Chave de idempotência ausente.', 422);
         }
 
         $instance = WhatsAppInstance::query()->with('workspace')->where('openwa_session_id', $payload['sessionId'] ?? null)->first();
@@ -41,13 +43,34 @@ class OpenWaEventController extends Controller
                 'delivery_id' => $payload['deliveryId'] ?? $request->header('X-OpenWA-Delivery-Id'),
                 'payload' => $payload,
             ]);
-        } catch (QueryException) {
-            return response()->json(['accepted' => true, 'duplicate' => true]);
+        } catch (QueryException $exception) {
+            if (InboundEvent::query()->where('idempotency_key', $idempotencyKey)->exists()) {
+                return response()->json(['accepted' => true, 'duplicate' => true]);
+            }
+
+            throw $exception;
         }
 
         if ($instance) {
             $this->apply($instance, $eventName, is_array($payload['data'] ?? null) ? $payload['data'] : [], $abuse, $openwa);
-            $dispatcher->dispatch($instance->workspace, $eventName, $payload['data'] ?? []);
+            $dispatcher->dispatch($instance->workspace, $eventName, $payload['data'] ?? [], 'openwa:'.$idempotencyKey.':'.$eventName);
+            $trigger = match ($eventName) {
+                'message.received' => 'message_received',
+                'message.failed' => 'message_failed',
+                'session.authenticated' => 'instance_connected',
+                default => null,
+            };
+            if ($trigger) {
+                $automations->dispatch(
+                    $instance->workspace,
+                    $trigger,
+                    array_merge(is_array($payload['data'] ?? null) ? $payload['data'] : [], [
+                        'event' => $eventName,
+                        'instance_uuid' => $instance->uuid,
+                    ]),
+                    'openwa:'.$idempotencyKey,
+                );
+            }
         }
         $event->update(['processed_at' => now()]);
 

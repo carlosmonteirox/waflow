@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\MessageEvent;
+use App\Services\AutomationExecutor;
 use App\Services\OpenWaClient;
 use App\Services\WorkspaceWebhookDispatcher;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -39,10 +40,20 @@ class SendWhatsAppMessage implements ShouldQueue
                 'processed_at' => now(),
                 'payload' => array_merge($message->payload ?? [], ['provider_response' => $result]),
             ]);
-            $webhooks->dispatch($message->workspace, 'message.sent', $message->fresh()->toArray());
         } catch (Throwable $exception) {
             $message->update(['status' => 'retrying', 'error' => $exception->getMessage()]);
             throw $exception;
+        }
+
+        try {
+            $webhooks->dispatch(
+                $message->workspace,
+                'message.sent',
+                $message->fresh()->toArray(),
+                'message:'.$message->uuid.':sent',
+            );
+        } catch (Throwable $exception) {
+            report($exception);
         }
     }
 
@@ -53,6 +64,21 @@ class SendWhatsAppMessage implements ShouldQueue
             return;
         }
         $message->update(['status' => 'failed', 'error' => $exception?->getMessage(), 'processed_at' => now()]);
-        app(WorkspaceWebhookDispatcher::class)->dispatch($message->workspace, 'message.failed', $message->fresh()->toArray());
+        try {
+            app(WorkspaceWebhookDispatcher::class)->dispatch(
+                $message->workspace,
+                'message.failed',
+                $message->fresh()->toArray(),
+                'message:'.$message->uuid.':failed',
+            );
+        } catch (Throwable $webhookException) {
+            report($webhookException);
+        }
+        app(AutomationExecutor::class)->dispatch(
+            $message->workspace,
+            'message_failed',
+            $message->fresh()->toArray(),
+            'message:'.$message->uuid.':failed',
+        );
     }
 }

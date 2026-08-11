@@ -8,6 +8,7 @@ use App\Models\Webhook;
 use App\Rules\PublicWebhookUrl;
 use App\Services\UsageLimiter;
 use App\Services\WorkspaceWebhookDispatcher;
+use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -17,17 +18,28 @@ class WebhookController extends Controller
 {
     use ResolvesWorkspace;
 
-    private const EVENTS = ['*', 'message.received', 'message.sent', 'message.ack', 'message.failed', 'message.revoked', 'message.reaction', 'message.edited', 'session.status', 'session.qr', 'session.authenticated', 'session.disconnected'];
+    private const EVENTS = ['*', 'message.received', 'message.sent', 'message.ack', 'message.failed', 'message.revoked', 'message.reaction', 'message.edited', 'session.status', 'session.qr', 'session.authenticated', 'session.disconnected', 'automation.action', 'automation.completed'];
 
     public function index(Request $request): JsonResponse
     {
-        return response()->json(['data' => $this->workspace($request)->webhooks()->latest()->get()]);
+        $attributes = $request->validate([
+            'status' => ['nullable', Rule::in(['active', 'paused'])],
+            'search' => ['nullable', 'string', 'max:120'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+        $query = $this->workspace($request)->webhooks()->latest();
+        $query->when(filled($attributes['status'] ?? null), fn ($query) => $query->where('status', $attributes['status']));
+        $query->when(filled($attributes['search'] ?? null), function ($query) use ($attributes): void {
+            $search = '%'.$attributes['search'].'%';
+            $query->where(fn ($query) => $query->where('name', 'like', $search)->orWhere('url', 'like', $search));
+        });
+
+        return ApiResponse::paginated($query->paginate(ApiResponse::perPage($request)));
     }
 
     public function store(Request $request, UsageLimiter $limiter): JsonResponse
     {
         $workspace = $this->workspace($request);
-        $limiter->ensureWebhooks($workspace);
         $attributes = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'url' => ['required', 'url:http,https', 'max:2048', new PublicWebhookUrl],
@@ -35,13 +47,17 @@ class WebhookController extends Controller
             'events.*' => ['string', Rule::in(self::EVENTS)],
         ]);
         $secret = Str::random(64);
-        $webhook = $workspace->webhooks()->create([
-            'name' => $attributes['name'],
-            'url' => $attributes['url'],
-            'events' => $attributes['events'] ?? ['message.received'],
-            'status' => 'active',
-            'signing_secret' => $secret,
-        ]);
+        $webhook = $limiter->serialized($workspace, function () use ($workspace, $limiter, $attributes, $secret): Webhook {
+            $limiter->ensureWebhooks($workspace);
+
+            return $workspace->webhooks()->create([
+                'name' => $attributes['name'],
+                'url' => $attributes['url'],
+                'events' => $attributes['events'] ?? ['message.received'],
+                'status' => 'active',
+                'signing_secret' => $secret,
+            ]);
+        });
 
         return response()->json(['data' => $webhook, 'signing_secret' => $secret], 201);
     }

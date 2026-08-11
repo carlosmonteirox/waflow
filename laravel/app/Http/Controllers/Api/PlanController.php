@@ -13,7 +13,7 @@ class PlanController extends Controller
         return response()->json([
             'data' => Plan::query()
                 ->orderBy('monthly_price_cents')
-                ->get(['name', 'slug', 'monthly_price_cents', 'instance_limit', 'message_limit', 'webhook_limit', 'api_key_limit', 'features']),
+                ->get(['name', 'slug', 'monthly_price_cents', 'instance_limit', 'message_limit', 'webhook_limit', 'api_key_limit', 'portal_limit', 'features']),
         ]);
     }
 }

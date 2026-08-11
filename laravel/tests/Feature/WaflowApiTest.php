@@ -127,7 +127,8 @@ class WaflowApiTest extends TestCase
             'signing_secret' => $secret,
         ]);
 
-        app(WorkspaceWebhookDispatcher::class)->dispatch($workspace, 'message.sent', ['message_uuid' => 'message-1']);
+        app(WorkspaceWebhookDispatcher::class)->dispatch($workspace, 'message.sent', ['message_uuid' => 'message-1'], 'message:message-1:sent');
+        app(WorkspaceWebhookDispatcher::class)->dispatch($workspace, 'message.sent', ['message_uuid' => 'message-1'], 'message:message-1:sent');
 
         Http::assertSent(function (ClientRequest $request) use ($secret): bool {
             $expected = 'sha256='.hash_hmac('sha256', $request->body(), $secret);
@@ -137,6 +138,8 @@ class WaflowApiTest extends TestCase
                 && hash_equals($expected, $request->header('X-Waflow-Signature')[0]);
         });
         $this->assertDatabaseHas('webhook_deliveries', ['workspace_id' => $workspace->id, 'event' => 'message.sent', 'status' => 'delivered']);
+        $this->assertDatabaseCount('webhook_deliveries', 1);
+        Http::assertSentCount(1);
     }
 
     private function workspaceWithKey(): array

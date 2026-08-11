@@ -12,6 +12,7 @@ class AuthController extends Controller
 {
     public function register(Request $request, RegistrationService $registration): JsonResponse
     {
+        $request->merge(['email' => mb_strtolower(trim((string) $request->input('email')))]);
         $attributes = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email:rfc', 'max:255', 'unique:users,email'],
