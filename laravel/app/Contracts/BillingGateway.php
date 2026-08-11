@@ -9,8 +9,13 @@ interface BillingGateway
 {
     public function configured(): bool;
 
-    /** @return array{provider: ?string, reference: ?string, url: ?string, payload: array<string, mixed>} */
-    public function createCheckout(BillingCheckoutSession $checkout): array;
+    /**
+     * @param  array{name?: string, email?: string, tax_id?: string}  $payer
+     * @return array{provider: ?string, reference: ?string, url: ?string, payload: array<string, mixed>}
+     */
+    public function createCheckout(BillingCheckoutSession $checkout, array $payer = []): array;
+
+    public function cancelCheckout(BillingCheckoutSession $checkout): void;
 
     public function cancelSubscription(Subscription $subscription, bool $atPeriodEnd): void;
 

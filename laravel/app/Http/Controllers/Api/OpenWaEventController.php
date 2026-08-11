@@ -11,7 +11,6 @@ use App\Services\OpenWaClient;
 use App\Services\TrialAbuseService;
 use App\Services\WorkspaceWebhookDispatcher;
 use App\Support\ApiResponse;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -34,22 +33,21 @@ class OpenWaEventController extends Controller
         }
 
         $instance = WhatsAppInstance::query()->with('workspace')->where('openwa_session_id', $payload['sessionId'] ?? null)->first();
-        try {
-            $event = InboundEvent::query()->create([
-                'workspace_id' => $instance?->workspace_id,
-                'whatsapp_instance_id' => $instance?->id,
-                'event' => $eventName,
-                'idempotency_key' => $idempotencyKey,
-                'delivery_id' => $payload['deliveryId'] ?? $request->header('X-OpenWA-Delivery-Id'),
-                'payload' => $payload,
-            ]);
-        } catch (QueryException $exception) {
-            if (InboundEvent::query()->where('idempotency_key', $idempotencyKey)->exists()) {
-                return response()->json(['accepted' => true, 'duplicate' => true]);
-            }
-
-            throw $exception;
+        $inserted = InboundEvent::query()->insertOrIgnore([
+            'workspace_id' => $instance?->workspace_id,
+            'whatsapp_instance_id' => $instance?->id,
+            'provider' => 'openwa',
+            'event' => $eventName,
+            'idempotency_key' => $idempotencyKey,
+            'delivery_id' => $payload['deliveryId'] ?? $request->header('X-OpenWA-Delivery-Id'),
+            'payload' => json_encode($payload, JSON_THROW_ON_ERROR),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        if ($inserted === 0) {
+            return response()->json(['accepted' => true, 'duplicate' => true]);
         }
+        $event = InboundEvent::query()->where('idempotency_key', $idempotencyKey)->firstOrFail();
 
         if ($instance) {
             $this->apply($instance, $eventName, is_array($payload['data'] ?? null) ? $payload['data'] : [], $abuse, $openwa);

@@ -66,7 +66,8 @@ class BillingController extends Controller
         return response()->json(['data' => [
             'subscription' => $workspace->subscription,
             'plan' => $workspace->subscription?->plan,
-            'payment_methods' => config('billing.payment_methods'),
+            'payment_methods' => config('billing.available_payment_methods'),
+            'provider' => config('billing.driver'),
             'provider_status' => config('billing.driver') === 'pending' ? 'pending_selection' : 'configured',
             'latest_checkout' => $workspace->checkoutSessions()->with('plan')->latest()->first(),
             'latest_invoice' => $workspace->invoices()->latest()->first(),
@@ -77,7 +78,7 @@ class BillingController extends Controller
     {
         $attributes = $request->validate([
             'status' => ['nullable', Rule::in(['draft', 'provider_pending', 'pending', 'completed', 'paid', 'cancelled', 'expired', 'failed'])],
-            'payment_method' => ['nullable', Rule::in(config('billing.payment_methods'))],
+            'payment_method' => ['nullable', Rule::in(config('billing.available_payment_methods'))],
             'plan_slug' => ['nullable', 'string', 'max:80'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
@@ -93,13 +94,16 @@ class BillingController extends Controller
     {
         $attributes = $request->validate([
             'plan_slug' => ['required', 'string', Rule::exists('plans', 'slug')],
-            'payment_method' => ['required', Rule::in(config('billing.payment_methods'))],
+            'payment_method' => ['required', Rule::in(config('billing.available_payment_methods'))],
+            'payer_name' => [Rule::requiredIf(config('billing.driver') === 'inter'), 'nullable', 'string', 'max:120'],
+            'payer_tax_id' => [Rule::requiredIf(config('billing.driver') === 'inter'), 'nullable', 'string', 'max:18'],
         ]);
         $checkout = $billing->createCheckout(
             $this->workspace($request),
             $request->attributes->get('waflow.workspace')->owner,
             Plan::query()->where('slug', $attributes['plan_slug'])->firstOrFail(),
             $attributes['payment_method'],
+            ['name' => $attributes['payer_name'] ?? null, 'tax_id' => $attributes['payer_tax_id'] ?? null],
         );
 
         return response()->json(['data' => $checkout], $checkout->status === 'provider_pending' ? 202 : 201);
@@ -112,13 +116,11 @@ class BillingController extends Controller
         return response()->json(['data' => $checkout->load('plan')]);
     }
 
-    public function cancelCheckout(Request $request, BillingCheckoutSession $checkout): JsonResponse
+    public function cancelCheckout(Request $request, BillingCheckoutSession $checkout, BillingService $billing): JsonResponse
     {
         $this->ensureWorkspace($checkout, $this->workspace($request));
-        abort_if(in_array($checkout->status, ['completed', 'paid'], true), 409, 'Um checkout concluído não pode ser cancelado.');
-        $checkout->update(['status' => 'cancelled']);
 
-        return response()->json(['data' => $checkout->fresh()]);
+        return response()->json(['data' => $billing->cancelCheckout($checkout)]);
     }
 
     public function invoices(Request $request): JsonResponse

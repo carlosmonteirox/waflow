@@ -48,3 +48,5 @@ public/hot
 
 # Project-local generated configuration
 /infra/.env
+/infra/secrets/*
+!/infra/secrets/.gitignore

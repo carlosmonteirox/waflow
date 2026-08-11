@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\InterApiException;
 use App\Exceptions\OpenWaException;
 use App\Http\Middleware\AttachRequestId;
 use App\Http\Middleware\AuthenticateApiKey;
@@ -36,6 +37,11 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (InterApiException $exception, Request $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return ApiResponse::error($request, $exception->providerCode ?? 'billing_provider_error', $exception->getMessage(), $exception->status);
+            }
+        });
         $exceptions->render(function (OpenWaException $exception, Request $request) {
             if ($request->expectsJson()) {
                 return ApiResponse::error($request, 'whatsapp_runtime_error', $exception->getMessage(), $exception->status >= 400 && $exception->status < 500 ? $exception->status : 502);

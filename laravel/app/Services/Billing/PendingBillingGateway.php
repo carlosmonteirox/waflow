@@ -13,7 +13,7 @@ class PendingBillingGateway implements BillingGateway
         return false;
     }
 
-    public function createCheckout(BillingCheckoutSession $checkout): array
+    public function createCheckout(BillingCheckoutSession $checkout, array $payer = []): array
     {
         return [
             'provider' => null,
@@ -25,6 +25,8 @@ class PendingBillingGateway implements BillingGateway
             ],
         ];
     }
+
+    public function cancelCheckout(BillingCheckoutSession $checkout): void {}
 
     public function cancelSubscription(Subscription $subscription, bool $atPeriodEnd): void {}
 

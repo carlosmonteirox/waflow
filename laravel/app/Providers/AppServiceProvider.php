@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Contracts\BillingGateway;
+use App\Services\Billing\InterBillingGateway;
 use App\Services\Billing\PendingBillingGateway;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -16,7 +17,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(BillingGateway::class, PendingBillingGateway::class);
+        $this->app->bind(BillingGateway::class, fn ($app) => match (config('billing.driver')) {
+            'inter' => $app->make(InterBillingGateway::class),
+            default => $app->make(PendingBillingGateway::class),
+        });
     }
 
     /**

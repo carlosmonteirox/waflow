@@ -63,8 +63,9 @@ WhatsApp credentials unreadable.
 - Automation flows run on the Redis queue, persist every execution and dedupe
   repeated source events.
 - Billing checkout, invoice, payment and renewal records are provider-neutral.
-  Credit, debit and Pix are prepared; `BILLING_DRIVER=pending` remains active
-  until the commercial gateway is selected.
+  The active adapter uses Banco Inter Pix Automático for monthly recurrence.
+  Credit and debit cards remain unavailable until a separate card acquirer is
+  selected; Waflow never accepts or stores raw card data.
 
 Anti-abuse controls reduce repeated trials but cannot prove that two identities
 belong to the same person. Production should combine them with e-mail reputation,
@@ -82,6 +83,38 @@ sample/   original interface reference assets
 The public contract and examples are documented in [`docs/API.md`](docs/API.md).
 The machine-readable OpenAPI 3.1 contract is available in
 [`docs/openapi.yaml`](docs/openapi.yaml) and at `GET /api/openapi.yaml`.
+
+## Banco Inter Pix Automático
+
+Create an Inter Empresas integration with the Pix Automático permissions, then
+place the downloaded certificate and private key at
+`infra/secrets/inter.crt` and `infra/secrets/inter.key`. Fill the `INTER_*`
+values in `infra/.env`, including receiver bank data. Certificates and local
+credentials are ignored by Git and mounted read-only in the PHP containers.
+
+The production callback URL must be public HTTPS. Set `APP_URL` or
+`INTER_WEBHOOK_URL`, rebuild the stack, and register both callbacks:
+
+```bash
+docker compose --env-file infra/.env -f infra/compose.yml exec -T laravel \
+  php artisan billing:inter:configure-webhooks
+```
+
+Checkout creates a Jornada 2 authorization. After the payer authorizes it, the
+hourly scheduler generates one recurring charge per monthly cycle and webhook
+events reconcile invoices, payments and subscription status. OAuth tokens are
+cached and reused; mTLS verification remains enabled.
+
+## Tests
+
+```bash
+make quality
+make test-postgres
+```
+
+The PostgreSQL suite starts isolated PostgreSQL 16 and Redis 7 containers, runs
+all tests, and removes the ephemeral environment without touching development
+volumes.
 
 ## Live end-to-end test
 

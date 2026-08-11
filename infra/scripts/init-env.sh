@@ -15,6 +15,7 @@ postgres_password="$(openssl rand -hex 24)"
 openwa_master_key="$(openssl rand -hex 32)"
 baileys_auth_encryption_key="$(openssl rand -hex 32)"
 openwa_webhook_secret="$(openssl rand -hex 32)"
+inter_webhook_secret="$(openssl rand -hex 32)"
 temp_file="$(mktemp "$script_dir/../.env.tmp.XXXXXX")"
 
 trap 'rm -f "$temp_file"' EXIT
@@ -43,6 +44,7 @@ if [ -e "$env_file" ]; then
     ensure_secret OPENWA_MASTER_KEY "$openwa_master_key"
     ensure_secret BAILEYS_AUTH_ENCRYPTION_KEY "$baileys_auth_encryption_key"
     ensure_secret OPENWA_WEBHOOK_SECRET "$openwa_webhook_secret"
+    ensure_secret INTER_WEBHOOK_SECRET "$inter_webhook_secret"
 
     chmod 600 "$temp_file"
     mv "$temp_file" "$env_file"
@@ -57,6 +59,7 @@ sed \
     -e "s|^OPENWA_MASTER_KEY=.*|OPENWA_MASTER_KEY=$openwa_master_key|" \
     -e "s|^BAILEYS_AUTH_ENCRYPTION_KEY=.*|BAILEYS_AUTH_ENCRYPTION_KEY=$baileys_auth_encryption_key|" \
     -e "s|^OPENWA_WEBHOOK_SECRET=.*|OPENWA_WEBHOOK_SECRET=$openwa_webhook_secret|" \
+    -e "s|^INTER_WEBHOOK_SECRET=.*|INTER_WEBHOOK_SECRET=$inter_webhook_secret|" \
     "$example_file" > "$temp_file"
 
 chmod 600 "$temp_file"

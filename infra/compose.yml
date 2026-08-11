@@ -5,6 +5,10 @@ x-laravel-build: &laravel-build
   dockerfile: infra/docker/laravel/Dockerfile
   target: app
 
+x-laravel-volumes: &laravel-volumes
+  - laravel-storage:/var/www/html/storage
+  - ./secrets:/run/secrets:ro
+
 x-laravel-environment: &laravel-environment
   APP_NAME: Waflow
   APP_ENV: production
@@ -32,9 +36,25 @@ x-laravel-environment: &laravel-environment
   OPENWA_API_KEY: ${OPENWA_MASTER_KEY:?Run ./infra/scripts/init-env.sh before starting Waflow}
   OPENWA_WEBHOOK_URL: http://gateway/api/v1/internal/openwa/events
   OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:?Run ./infra/scripts/init-env.sh before starting Waflow}
-  BILLING_DRIVER: ${BILLING_DRIVER:-pending}
+  BILLING_DRIVER: ${BILLING_DRIVER:-inter}
   BILLING_CURRENCY: ${BILLING_CURRENCY:-BRL}
   BILLING_CHECKOUT_TTL_MINUTES: ${BILLING_CHECKOUT_TTL_MINUTES:-30}
+  BILLING_PAYMENT_METHODS: ${BILLING_PAYMENT_METHODS:-pix}
+  INTER_ENVIRONMENT: ${INTER_ENVIRONMENT:-sandbox}
+  INTER_CLIENT_ID: ${INTER_CLIENT_ID:-}
+  INTER_CLIENT_SECRET: ${INTER_CLIENT_SECRET:-}
+  INTER_CERTIFICATE_PATH: ${INTER_CERTIFICATE_PATH:-/run/secrets/inter.crt}
+  INTER_PRIVATE_KEY_PATH: ${INTER_PRIVATE_KEY_PATH:-/run/secrets/inter.key}
+  INTER_CERTIFICATE_PASSPHRASE: ${INTER_CERTIFICATE_PASSPHRASE:-}
+  INTER_PRIVATE_KEY_PASSPHRASE: ${INTER_PRIVATE_KEY_PASSPHRASE:-}
+  INTER_ACCOUNT: ${INTER_ACCOUNT:-}
+  INTER_WEBHOOK_SECRET: ${INTER_WEBHOOK_SECRET:?Run ./infra/scripts/init-env.sh before starting Waflow}
+  INTER_WEBHOOK_URL: ${INTER_WEBHOOK_URL:-}
+  INTER_RECEIVER_NAME: ${INTER_RECEIVER_NAME:-}
+  INTER_RECEIVER_CNPJ: ${INTER_RECEIVER_CNPJ:-}
+  INTER_RECEIVER_AGENCY: ${INTER_RECEIVER_AGENCY:-}
+  INTER_RECEIVER_ACCOUNT: ${INTER_RECEIVER_ACCOUNT:-}
+  INTER_RECEIVER_ACCOUNT_TYPE: ${INTER_RECEIVER_ACCOUNT_TYPE:-CORRENTE}
   MAIL_MAILER: ${MAIL_MAILER:-log}
   MAIL_HOST: ${MAIL_HOST:-}
   MAIL_PORT: ${MAIL_PORT:-587}
@@ -72,8 +92,7 @@ services:
     restart: unless-stopped
     init: true
     environment: *laravel-environment
-    volumes:
-      - laravel-storage:/var/www/html/storage
+    volumes: *laravel-volumes
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -96,8 +115,7 @@ services:
     restart: "no"
     environment: *laravel-environment
     command: ["php", "artisan", "migrate", "--force", "--no-interaction"]
-    volumes:
-      - laravel-storage:/var/www/html/storage
+    volumes: *laravel-volumes
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,8 +141,7 @@ services:
         "--no-interaction",
       ]
     stop_grace_period: 45s
-    volumes:
-      - laravel-storage:/var/www/html/storage
+    volumes: *laravel-volumes
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -132,6 +149,7 @@ services:
         condition: service_healthy
     networks:
       - private
+      - egress
 
   scheduler:
     build: *laravel-build
@@ -140,8 +158,7 @@ services:
     init: true
     environment: *laravel-environment
     command: ["php", "artisan", "schedule:work", "--no-interaction"]
-    volumes:
-      - laravel-storage:/var/www/html/storage
+    volumes: *laravel-volumes
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -149,6 +166,7 @@ services:
         condition: service_healthy
     networks:
       - private
+      - egress
 
   openwa:
     build:
@@ -195,6 +213,7 @@ services:
         condition: service_healthy
     networks:
       - private
+      - egress
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -264,5 +283,6 @@ volumes:
 
 networks:
   public:
+  egress:
   private:
     internal: true

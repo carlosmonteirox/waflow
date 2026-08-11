@@ -26,6 +26,7 @@ const user = computed(() => props.payload.user || {});
 const usage = computed(() => props.payload.usage || {});
 const navSections = computed(() => props.payload.navSections || []);
 const qrInstance = computed(() => pageData.value.instances?.find((instance) => instance.qr_code));
+const latestPixCheckout = computed(() => pageData.value.checkouts?.find((checkout) => checkout.pix_copy_paste));
 
 const endpoints = [
     ['GET', '/api/v1/health', 'Saúde pública da plataforma'],
@@ -42,7 +43,7 @@ const endpoints = [
     ['GET|POST', '/api/v1/webhooks', 'Callbacks de eventos'],
     ['GET|POST|DELETE', '/api/v1/api-keys', 'Gerenciar chaves'],
     ['GET', '/api/v1/billing/usage', 'Uso e limites do plano'],
-    ['POST', '/api/v1/billing/checkouts', 'Checkout por cartão ou Pix'],
+    ['POST', '/api/v1/billing/checkouts', 'Checkout e autorização Pix Automático'],
 ];
 
 const usageLabels = {
@@ -104,6 +105,16 @@ function initials(value, fallback = 'WF') {
 
 function formatNumber(value) {
     return Number(value || 0).toLocaleString('pt-BR');
+}
+
+function paymentMethodLabel(method) {
+    return { credit_card: 'Cartão de crédito', debit_card: 'Cartão de débito', pix: 'Pix Automático' }[method] || method;
+}
+
+async function copyText(value) {
+    if (value) {
+        await navigator.clipboard.writeText(value);
+    }
 }
 
 function badgeVariant(status, fallback = 'secondary') {
@@ -1094,8 +1105,12 @@ function progressWidth(item) {
                                 <form v-if="permissions.manage_billing" class="kt-card-content p-5 grid gap-4" :action="routeGroup('billing').checkout" method="post">
                                     <input name="_token" type="hidden" :value="csrfToken">
                                     <div class="grid gap-1"><label class="kt-form-label">Plano</label><select class="kt-input" name="plan_slug" required><option v-for="availablePlan in pageData.plans || []" :key="availablePlan.slug" :value="availablePlan.slug">{{ availablePlan.name }} — {{ availablePlan.monthly_price_label }}/mês</option></select></div>
-                                    <div class="grid gap-1"><label class="kt-form-label">Pagamento</label><select class="kt-input" name="payment_method" required><option value="credit_card">Cartão de crédito</option><option value="debit_card">Cartão de débito</option><option value="pix">Pix</option></select></div>
-                                    <div class="text-xs text-secondary-foreground">Integração: {{ pageData.provider_status === 'configured' ? 'provedor configurado' : 'provedor ainda será escolhido' }}</div>
+                                    <div class="grid gap-1"><label class="kt-form-label">Pagamento</label><select class="kt-input" name="payment_method" required><option v-for="method in pageData.payment_methods || []" :key="method" :value="method">{{ paymentMethodLabel(method) }}</option></select></div>
+                                    <template v-if="pageData.provider === 'inter'">
+                                        <div class="grid gap-1"><label class="kt-form-label">Nome do pagador</label><input class="kt-input" name="payer_name" :value="user.name" maxlength="120" required></div>
+                                        <div class="grid gap-1"><label class="kt-form-label">CPF ou CNPJ</label><input class="kt-input" name="payer_tax_id" inputmode="numeric" maxlength="18" placeholder="Somente números" required></div>
+                                    </template>
+                                    <div class="text-xs text-secondary-foreground">Integração: {{ pageData.provider === 'inter' ? 'Banco Inter · Pix Automático' : (pageData.provider_status === 'configured' ? 'provedor configurado' : 'provedor ainda será escolhido') }}</div>
                                     <button class="kt-btn kt-btn-primary justify-center" type="submit">Preparar checkout</button>
                                 </form>
                                 <div v-else class="kt-card-content p-5 text-sm text-secondary-foreground">Somente owner ou admin pode alterar o plano.</div>
@@ -1107,6 +1122,18 @@ function progressWidth(item) {
                                     <thead><tr><th>Plano</th><th>Forma</th><th>Valor</th><th>Status</th><th>Data</th></tr></thead>
                                     <tbody><tr v-for="checkout in pageData.checkouts || []" :key="checkout.uuid"><td>{{ checkout.plan }}</td><td>{{ checkout.payment_method }}</td><td>{{ checkout.amount_label }}</td><td><span class="kt-badge kt-badge-light" :class="`kt-badge-${badgeVariant(checkout.status)}`">{{ checkout.status }}</span></td><td>{{ checkout.created_at_label }}</td></tr><tr v-if="!pageData.checkouts?.length"><td colspan="5" class="text-center text-secondary-foreground py-8">Nenhum checkout iniciado.</td></tr></tbody>
                                 </table></div></div>
+                            </div>
+                        </div>
+
+                        <div v-if="latestPixCheckout" class="kt-card mt-5">
+                            <div class="kt-card-header"><h3 class="kt-card-title">Autorizar Pix Automático</h3></div>
+                            <div class="kt-card-content p-5 grid gap-4">
+                                <p class="text-sm text-secondary-foreground">Copie o código abaixo no aplicativo do seu banco para autorizar as próximas cobranças mensais.</p>
+                                <textarea class="kt-input min-h-28 font-mono text-xs" readonly :value="latestPixCheckout.pix_copy_paste"></textarea>
+                                <div class="flex flex-wrap gap-2">
+                                    <button class="kt-btn kt-btn-primary" type="button" @click="copyText(latestPixCheckout.pix_copy_paste)">Copiar código Pix</button>
+                                    <a v-if="latestPixCheckout.checkout_url" class="kt-btn kt-btn-outline" :href="latestPixCheckout.checkout_url" target="_blank" rel="noopener">Abrir autorização</a>
+                                </div>
                             </div>
                         </div>
 

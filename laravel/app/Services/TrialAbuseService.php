@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\TrialIdentifier;
 use App\Models\TrialRegistration;
 use App\Models\Workspace;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -69,9 +68,14 @@ class TrialAbuseService
         }
 
         $hash = $this->hash(mb_strtolower(trim($value)));
-        try {
-            TrialIdentifier::query()->create(['workspace_id' => $workspace->id, 'type' => $type, 'value_hash' => $hash]);
-        } catch (QueryException) {
+        $inserted = TrialIdentifier::query()->insertOrIgnore([
+            'workspace_id' => $workspace->id,
+            'type' => $type,
+            'value_hash' => $hash,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        if ($inserted === 0) {
             $belongsToWorkspace = TrialIdentifier::query()
                 ->where('type', $type)
                 ->where('value_hash', $hash)

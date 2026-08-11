@@ -17,7 +17,7 @@ ARTISAN := $(COMPOSE) exec -T laravel php artisan
 .PHONY: help init env up start stop down restart build rebuild ps logs shell \
 	artisan migrate seed queue-restart composer-install npm-install npm-dev \
 	npm-build test pint lint quality health compose-config clean-build destroy \
-	e2e-live
+	test-postgres e2e-live
 
 help: ## Lista os comandos disponíveis
 	@printf '%s\n' "$(APP_NAME) make targets:"
@@ -85,6 +85,9 @@ npm-build: ## Compila assets Vite
 
 test: ## Executa testes Laravel
 	cd $(LARAVEL_DIR) && php artisan test
+
+test-postgres: ## Executa a suíte completa em PostgreSQL 16 isolado
+	./infra/scripts/test-postgres.sh
 
 pint: ## Executa Laravel Pint em modo check
 	cd $(LARAVEL_DIR) && vendor/bin/pint --test

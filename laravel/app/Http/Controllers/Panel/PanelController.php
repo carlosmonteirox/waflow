@@ -176,7 +176,8 @@ class PanelController extends Controller
         return $this->render($request, $workspace, 'billing', 'Plano e consumo', 'Acompanhe limites, uso mensal e status da assinatura.', [
             'metrics' => $this->metrics($workspace),
             'plans' => Plan::query()->orderBy('monthly_price_cents')->get()->map(fn ($plan) => $this->planPayload($plan))->all(),
-            'payment_methods' => config('billing.payment_methods'),
+            'payment_methods' => config('billing.available_payment_methods'),
+            'provider' => config('billing.driver'),
             'provider_status' => config('billing.driver') === 'pending' ? 'pending_selection' : 'configured',
             'checkouts' => $workspace->checkoutSessions()->with('plan')->latest()->limit(10)->get()->map(fn ($checkout) => [
                 'uuid' => $checkout->uuid,
@@ -184,6 +185,9 @@ class PanelController extends Controller
                 'payment_method' => $checkout->payment_method,
                 'status' => $checkout->status,
                 'amount_label' => 'R$ '.number_format($checkout->amount_cents / 100, 2, ',', '.'),
+                'checkout_url' => $checkout->checkout_url,
+                'pix_copy_paste' => data_get($checkout->provider_payload, 'pix_copy_paste'),
+                'provider_status' => data_get($checkout->provider_payload, 'status'),
                 'created_at_label' => $checkout->created_at?->format('d/m/Y H:i'),
             ])->all(),
             'invoices' => $workspace->invoices()->latest()->limit(10)->get()->map(fn ($invoice) => [
@@ -538,14 +542,19 @@ class PanelController extends Controller
         $this->assertWorkspaceRole($request, $workspace, ['owner', 'admin']);
         $attributes = $request->validate([
             'plan_slug' => ['required', Rule::exists('plans', 'slug')],
-            'payment_method' => ['required', Rule::in(config('billing.payment_methods'))],
+            'payment_method' => ['required', Rule::in(config('billing.available_payment_methods'))],
+            'payer_name' => [Rule::requiredIf(config('billing.driver') === 'inter'), 'nullable', 'string', 'max:120'],
+            'payer_tax_id' => [Rule::requiredIf(config('billing.driver') === 'inter'), 'nullable', 'string', 'max:18'],
         ]);
         $plan = Plan::query()->where('slug', $attributes['plan_slug'])->firstOrFail();
-        $checkout = $billing->createCheckout($workspace, $request->user(), $plan, $attributes['payment_method']);
+        $checkout = $billing->createCheckout($workspace, $request->user(), $plan, $attributes['payment_method'], [
+            'name' => $attributes['payer_name'] ?? null,
+            'tax_id' => $attributes['payer_tax_id'] ?? null,
+        ]);
 
         return back()->with('status', $checkout->status === 'provider_pending'
             ? 'Checkout preparado. Aguardando a definição do provedor de pagamentos.'
-            : 'Checkout criado.');
+            : ($checkout->provider === 'inter' ? 'Pix Automático criado. Autorize a recorrência pelo código Pix.' : 'Checkout criado.'));
     }
 
     public function cancelSubscription(Request $request, WorkspaceContext $context, BillingService $billing): RedirectResponse

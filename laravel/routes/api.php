@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\BillingController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\FlowController;
 use App\Http\Controllers\Api\InstanceController;
+use App\Http\Controllers\Api\InterWebhookController;
 use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\OpenWaEventController;
 use App\Http\Controllers\Api\PlanController;
@@ -24,6 +25,10 @@ Route::prefix('v1')->as('api.')->group(function (): void {
     Route::get('/plans', [PlanController::class, 'index'])->name('plans.index');
     Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:waflow-registration')->name('auth.register');
     Route::post('/internal/openwa/events', OpenWaEventController::class)->middleware('throttle:600,1')->name('internal.openwa.events');
+    Route::post('/internal/billing/inter/{secret}/{event}', InterWebhookController::class)
+        ->whereIn('event', ['rec', 'cobr'])
+        ->middleware('throttle:600,1')
+        ->name('internal.billing.inter');
 
     Route::middleware(['waflow.api', 'throttle:waflow-api'])->group(function (): void {
         Route::post('/auth/email/verification-notification', [AuthController::class, 'resendVerification'])

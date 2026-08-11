@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\Billing\InterRenewalService;
 use App\Services\PlatformMaintenance;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -12,3 +13,7 @@ Artisan::command('inspire', function () {
 Schedule::call(function (): void {
     app(PlatformMaintenance::class)->expireTemporaryRecords();
 })->everyFiveMinutes()->name('waflow-expire-temporary-records')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    app(InterRenewalService::class)->generateDueCharges();
+})->hourly()->name('waflow-inter-renewals')->withoutOverlapping();

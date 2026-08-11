@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Waflow API
-  version: 1.0.0
+  version: 1.1.0
   summary: API multi-tenant para automação e mensageria WhatsApp.
   description: |
     Contrato público do Waflow. Todos os recursos autenticados são isolados pelo
@@ -114,21 +114,25 @@ paths:
     post:
       tags: [Billing]
       operationId: createCheckout
-      summary: Prepara checkout para cartão de crédito, débito ou Pix.
+      summary: Cria a autorização recorrente por Pix Automático do Banco Inter.
+      description: O CPF/CNPJ é enviado diretamente ao Banco Inter e não é persistido integralmente pelo Waflow.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [plan_slug, payment_method]
+              required: [plan_slug, payment_method, payer_name, payer_tax_id]
               properties:
                 plan_slug: {type: string, example: growth}
-                payment_method: {type: string, enum: [credit_card, debit_card, pix]}
+                payment_method: {type: string, enum: [pix]}
+                payer_name: {type: string, maxLength: 120, example: Maria da Silva}
+                payer_tax_id: {type: string, maxLength: 18, description: CPF ou CNPJ, com ou sem pontuação.}
       responses:
         '201': {$ref: '#/components/responses/ResourceCreated'}
         '202': {description: Checkout preparado; provedor ainda não configurado, content: {application/json: {schema: {$ref: '#/components/schemas/ResourceEnvelope'}}}}
         '422': {$ref: '#/components/responses/ValidationError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /billing/checkouts/{checkout}:
     parameters: [{$ref: '#/components/parameters/Checkout'}]
     get:

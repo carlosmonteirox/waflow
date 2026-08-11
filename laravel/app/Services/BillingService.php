@@ -15,16 +15,21 @@ class BillingService
 {
     public function __construct(private readonly BillingGateway $gateway) {}
 
-    public function createCheckout(Workspace $workspace, User $user, Plan $plan, string $paymentMethod): BillingCheckoutSession
+    /** @param array{name?: string, email?: string, tax_id?: string} $payer */
+    public function createCheckout(Workspace $workspace, User $user, Plan $plan, string $paymentMethod, array $payer = []): BillingCheckoutSession
     {
-        if (! in_array($paymentMethod, config('billing.payment_methods', []), true)) {
+        if (! in_array($paymentMethod, config('billing.available_payment_methods', []), true)) {
             throw ValidationException::withMessages(['payment_method' => 'Forma de pagamento não suportada.']);
         }
 
-        return DB::transaction(function () use ($workspace, $user, $plan, $paymentMethod): BillingCheckoutSession {
+        return DB::transaction(function () use ($workspace, $user, $plan, $paymentMethod, $payer): BillingCheckoutSession {
             Workspace::query()->whereKey($workspace->id)->lockForUpdate()->firstOrFail();
-            $workspace->checkoutSessions()->whereIn('status', ['draft', 'provider_pending', 'pending'])
-                ->update(['status' => 'cancelled']);
+            $openCheckouts = $workspace->checkoutSessions()->whereIn('status', ['draft', 'provider_pending', 'pending'])
+                ->lockForUpdate()->get();
+            foreach ($openCheckouts as $openCheckout) {
+                $this->gateway->cancelCheckout($openCheckout);
+                $openCheckout->update(['status' => 'cancelled']);
+            }
 
             $checkout = $workspace->checkoutSessions()->create([
                 'plan_id' => $plan->id,
@@ -36,7 +41,10 @@ class BillingService
                 'expires_at' => now()->addMinutes((int) config('billing.checkout_ttl_minutes', 30)),
             ]);
 
-            $provider = $this->gateway->createCheckout($checkout);
+            $provider = $this->gateway->createCheckout($checkout, array_merge([
+                'name' => $user->name,
+                'email' => $user->email,
+            ], $payer));
             $checkout->update([
                 'status' => $this->gateway->configured() ? 'pending' : 'provider_pending',
                 'provider' => $provider['provider'],
@@ -47,6 +55,15 @@ class BillingService
 
             return $checkout->fresh('plan');
         });
+    }
+
+    public function cancelCheckout(BillingCheckoutSession $checkout): BillingCheckoutSession
+    {
+        abort_if(in_array($checkout->status, ['completed', 'paid'], true), 409, 'Um checkout concluído não pode ser cancelado.');
+        $this->gateway->cancelCheckout($checkout);
+        $checkout->update(['status' => 'cancelled']);
+
+        return $checkout->fresh();
     }
 
     public function cancel(Subscription $subscription, bool $atPeriodEnd = true): Subscription

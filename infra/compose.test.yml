@@ -1,0 +1,60 @@
+name: waflow-tests
+
+services:
+  tests:
+    image: waflow/laravel:${WAFLOW_VERSION:-local}
+    environment:
+      APP_ENV: testing
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres-test
+      DB_PORT: 5432
+      DB_DATABASE: waflow_test
+      DB_USERNAME: waflow_test
+      DB_PASSWORD: testing-password
+      CACHE_STORE: redis
+      REDIS_HOST: redis-test
+      REDIS_PORT: 6379
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    command:
+      - sh
+      - -lc
+      - >-
+        mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
+        && php vendor/bin/phpunit --configuration phpunit.postgres.xml --do-not-cache-result
+    volumes:
+      - ../laravel:/var/www/html:ro
+      - ../docs:/var/www/docs:ro
+    tmpfs:
+      - /var/www/html/storage:uid=82,gid=82,mode=0770
+      - /var/www/html/bootstrap/cache:uid=82,gid=82,mode=0770
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: waflow_test
+      POSTGRES_USER: waflow_test
+      POSTGRES_PASSWORD: testing-password
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waflow_test -d waflow_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  redis-test:
+    image: redis:7-alpine
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
