@@ -3,6 +3,8 @@ import laravel from 'laravel-vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 
+const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT || 5173);
+
 export default defineConfig({
     plugins: [
         laravel({
@@ -20,6 +22,13 @@ export default defineConfig({
         tailwindcss(),
     ],
     server: {
+        origin: process.env.VITE_DEV_SERVER_URL,
+        hmr: process.env.VITE_HMR_HOST
+            ? {
+                host: process.env.VITE_HMR_HOST,
+                clientPort: hmrClientPort,
+            }
+            : undefined,
         watch: {
             ignored: ['**/storage/framework/views/**'],
         },

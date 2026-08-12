@@ -31,6 +31,13 @@ The panel and API are available at `http://localhost:8080`. The initializer is
 idempotent and adds newly required secrets to an existing `infra/.env` without
 replacing configured values.
 
+For local development, `make up` starts the application stack and the Vite dev
+server in the background. Vue, JavaScript and CSS changes use HMR through
+`http://localhost:5173`; Blade and PHP changes are read from the local source
+mounts. Use `make logs SERVICE=vite` to follow the frontend compiler and
+`make down` to stop the complete development stack. `make build` continues to
+build the production images without the development override.
+
 Use a real SMTP provider before production so account verification messages are
 delivered. With the local `MAIL_MAILER=log` setting, links are written to the
 Laravel container logs.

@@ -1,0 +1,56 @@
+name: waflow
+
+x-laravel-dev-volumes: &laravel-dev-volumes
+  - ../laravel/app:/var/www/html/app
+  - ../laravel/config:/var/www/html/config
+  - ../laravel/database:/var/www/html/database
+  - ../laravel/public:/var/www/html/public
+  - ../laravel/resources:/var/www/html/resources
+  - ../laravel/routes:/var/www/html/routes
+
+services:
+  gateway:
+    volumes:
+      - ../laravel/public:/var/www/html/public:ro
+
+  laravel:
+    volumes: *laravel-dev-volumes
+
+  migrate:
+    volumes: *laravel-dev-volumes
+
+  worker:
+    volumes: *laravel-dev-volumes
+
+  scheduler:
+    volumes: *laravel-dev-volumes
+
+  vite:
+    build:
+      context: ..
+      dockerfile: infra/docker/laravel/Dockerfile
+      target: assets
+    image: waflow/vite:${WAFLOW_VERSION:-local}
+    working_dir: /app
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173", "--strictPort"]
+    restart: unless-stopped
+    environment:
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      VITE_DEV_SERVER_URL: http://localhost:${VITE_PORT:-5173}
+      VITE_HMR_CLIENT_PORT: ${VITE_PORT:-5173}
+      VITE_HMR_HOST: localhost
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    volumes:
+      - ../laravel/app:/app/app:ro
+      - ../laravel/public:/app/public
+      - ../laravel/resources:/app/resources:ro
+      - ../laravel/vite.config.js:/app/vite.config.js:ro
+    networks:
+      - public
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/@vite/client"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s

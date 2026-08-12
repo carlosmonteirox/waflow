@@ -2,6 +2,7 @@ SHELL := /bin/sh
 
 APP_NAME := Waflow
 COMPOSE_FILE := infra/compose.yml
+COMPOSE_DEV_FILE := infra/compose.dev.yml
 ENV_FILE := infra/.env
 ENV_EXAMPLE := infra/.env.example
 HTTP_PORT ?= 8080
@@ -9,6 +10,7 @@ SERVICE ?= laravel
 CMD ?=
 
 COMPOSE := docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE)
+COMPOSE_DEV := $(COMPOSE) -f $(COMPOSE_DEV_FILE)
 LARAVEL_DIR := laravel
 ARTISAN := $(COMPOSE) exec -T laravel php artisan
 
@@ -28,20 +30,21 @@ init: ## Cria infra/.env com segredos locais se ainda não existir
 
 env: init ## Alias para init
 
-up: init ## Sobe o stack com build das imagens
-	$(COMPOSE) up -d --build
+up: init ## Sobe o stack de desenvolvimento com Vite/HMR
+	$(COMPOSE_DEV) up -d --build
 
-start: init ## Sobe o stack sem rebuild forçado
-	$(COMPOSE) up -d
+start: init ## Sobe o stack de desenvolvimento sem rebuild forçado
+	$(COMPOSE_DEV) up -d
 
 stop: ## Para containers sem remover rede/volumes
-	$(COMPOSE) stop
+	$(COMPOSE_DEV) stop
 
 down: ## Remove containers e rede, preservando volumes
-	$(COMPOSE) down
+	$(COMPOSE_DEV) down
+	@rm -f $(LARAVEL_DIR)/public/hot
 
 restart: ## Reinicia o stack preservando volumes
-	$(COMPOSE) restart
+	$(COMPOSE_DEV) restart
 
 build: init ## Build das imagens
 	$(COMPOSE) build
@@ -50,10 +53,10 @@ rebuild: init ## Build sem cache das imagens
 	$(COMPOSE) build --no-cache
 
 ps: ## Mostra status dos containers
-	$(COMPOSE) ps
+	$(COMPOSE_DEV) ps
 
-logs: ## Mostra logs. Use SERVICE=gateway, laravel, openwa, etc.
-	$(COMPOSE) logs -f --tail=200 $(SERVICE)
+logs: ## Mostra logs. Use SERVICE=vite, laravel, openwa, etc.
+	$(COMPOSE_DEV) logs -f --tail=200 $(SERVICE)
 
 shell: ## Abre shell no serviço. Use SERVICE=laravel por padrão
 	$(COMPOSE) exec $(SERVICE) sh
@@ -104,8 +107,9 @@ health: ## Consulta health check público
 e2e-live: ## Envia mensagem real e testa concorrência (requer variáveis WAFLOW_E2E_*)
 	./infra/scripts/e2e-live.sh
 
-compose-config: init ## Valida a configuração Docker Compose
+compose-config: init ## Valida as configurações Docker de produção e desenvolvimento
 	$(COMPOSE) config --quiet
+	$(COMPOSE_DEV) config --quiet
 
 clean-build: ## Remove build Vite local
 	rm -rf $(LARAVEL_DIR)/public/build
