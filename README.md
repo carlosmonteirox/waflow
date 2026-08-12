@@ -40,6 +40,10 @@ docker compose --env-file infra/.env -f infra/compose.yml logs -f laravel
 docker compose --env-file infra/.env -f infra/compose.yml down
 ```
 
+The dedicated `mail` log channel always records local e-mails at debug level,
+even when the application log level is `info`, so 2FA codes remain visible with
+the command above.
+
 Persistent state lives in named volumes. Do not use `down -v` unless PostgreSQL,
 Redis, media and Laravel storage may be deleted. Keep
 `BAILEYS_AUTH_ENCRYPTION_KEY` stable and backed up; changing it makes existing
