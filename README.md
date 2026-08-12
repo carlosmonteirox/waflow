@@ -84,6 +84,12 @@ openwa/   private OpenWA/Baileys runtime
 sample/   original interface reference assets
 ```
 
+The panel keeps server routes and Vue views paired by page. Dedicated Blade
+views live in `laravel/resources/views/panel`, while their Vue counterparts live
+in `laravel/resources/js/panel/pages`. `PanelShell.vue` owns the common layout,
+and `pages/index.js` is the only component registry used by the frontend entry
+point.
+
 The public contract and examples are documented in [`docs/API.md`](docs/API.md).
 The machine-readable OpenAPI 3.1 contract is available in
 [`docs/openapi.yaml`](docs/openapi.yaml) and at `GET /api/openapi.yaml`.

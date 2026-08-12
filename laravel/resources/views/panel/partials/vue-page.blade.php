@@ -9,5 +9,5 @@
     ];
 @endphp
 
-<div id="waflow-panel"></div>
+<div id="waflow-panel" data-waflow-page="{{ $component ?? $payload['page'] ?? 'dashboard' }}"></div>
 <script type="application/json" id="waflow-page-props">@json($payload)</script>

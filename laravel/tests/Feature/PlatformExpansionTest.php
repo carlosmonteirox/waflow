@@ -312,12 +312,34 @@ class PlatformExpansionTest extends TestCase
         Http::fake(['*/api/health/ready' => Http::response(['status' => 'ok'])]);
         [$user] = $this->workspaceWithKey();
 
-        foreach (['dashboard', 'panel.instances', 'panel.flows', 'panel.messages', 'panel.contacts', 'panel.portals', 'panel.developers', 'panel.webhooks', 'panel.api-keys', 'panel.team', 'panel.billing', 'panel.settings'] as $routeName) {
+        $pages = [
+            'dashboard' => 'DashboardPage.vue',
+            'panel.instances' => 'InstancesPage.vue',
+            'panel.flows' => 'FlowsPage.vue',
+            'panel.messages' => 'MessagesPage.vue',
+            'panel.contacts' => 'ContactsPage.vue',
+            'panel.portals' => 'PortalsPage.vue',
+            'panel.developers' => 'DevelopersPage.vue',
+            'panel.webhooks' => 'WebhooksPage.vue',
+            'panel.api-keys' => 'ApiKeysPage.vue',
+            'panel.team' => 'TeamPage.vue',
+            'panel.billing' => 'BillingPage.vue',
+            'panel.settings' => 'SettingsPage.vue',
+        ];
+
+        foreach ($pages as $routeName => $componentFile) {
+            $pageName = str($componentFile)->before('Page.vue')->kebab()->toString();
+
+            $this->assertFileExists(resource_path("js/panel/pages/{$componentFile}"));
             $this->actingAs($user)->get(route($routeName))
                 ->assertOk()
                 ->assertSee('waflow-panel', false)
+                ->assertSee("data-waflow-page=\"{$pageName}\"", false)
                 ->assertSee('waflow-page-props', false);
         }
+
+        $this->assertFileExists(resource_path('js/panel/PanelShell.vue'));
+        $this->assertFileDoesNotExist(resource_path('js/components/PanelApp.vue'));
     }
 
     public function test_waflow_openapi_document_is_public_and_valid_yaml(): void

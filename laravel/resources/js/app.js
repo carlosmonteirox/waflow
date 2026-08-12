@@ -1,7 +1,7 @@
 import './bootstrap';
 import { createApp } from 'vue';
 import AuthApp from './components/AuthApp.vue';
-import PanelApp from './components/PanelApp.vue';
+import { panelPages } from './panel/pages';
 
 const payloadElement = document.getElementById('waflow-page-props');
 
@@ -32,4 +32,18 @@ function mount(selector, component) {
 }
 
 mount('#waflow-auth', AuthApp);
-mount('#waflow-panel', PanelApp);
+
+const panelElement = document.querySelector('[data-waflow-page]');
+
+if (panelElement) {
+    const pageName = panelElement.dataset.waflowPage;
+    const pageComponent = panelPages[pageName];
+
+    if (pageComponent) {
+        createApp(pageComponent, {
+            payload: readPayload(),
+        }).mount(panelElement);
+    } else {
+        console.error(`Unknown Waflow panel page: ${pageName}`);
+    }
+}
