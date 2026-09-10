@@ -18,6 +18,7 @@
             'name' => old('name'),
             'workspace_name' => old('workspace_name'),
             'email' => old('email'),
+            'partner_code' => old('partner_code'),
         ],
         'flash' => [
             'status' => session('status'),

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 const props = defineProps({
     payload: {
@@ -10,6 +10,11 @@ const props = defineProps({
 
 const showPassword = ref(false);
 const showPasswordConfirmation = ref(false);
+const isDarkMode = ref(false);
+const loginEmail = ref(props.payload.old?.email || '');
+const loginPassword = ref('');
+const verificationDigits = ref(Array.from({ length: 6 }, () => ''));
+const verificationInputs = ref([]);
 
 const page = computed(() => props.payload.page || 'login');
 const csrfToken = computed(() => props.payload.csrfToken || '');
@@ -27,22 +32,105 @@ function oldValue(name, fallback = '') {
     return old.value[name] ?? fallback;
 }
 
-function movePinFocus(event) {
-    const input = event.target;
+function setVerificationInput(element, index) {
+    if (element) {
+        verificationInputs.value[index] = element;
+    }
+}
 
-    if (input.value.length !== 1) {
+function verificationNumbers(value) {
+    return `${value || ''}`.replace(/\D/g, '').slice(0, 6);
+}
+
+async function focusVerificationInput(index) {
+    await nextTick();
+    const input = verificationInputs.value[Math.max(0, Math.min(5, index))];
+    input?.focus();
+    input?.select();
+}
+
+function distributeVerificationCode(value, startIndex = 0) {
+    const numbers = verificationNumbers(value);
+    if (!numbers) return;
+
+    numbers.split('').forEach((number, offset) => {
+        const index = startIndex + offset;
+        if (index < verificationDigits.value.length) {
+            verificationDigits.value[index] = number;
+        }
+    });
+
+    const nextEmpty = verificationDigits.value.findIndex((number, index) => index >= startIndex && !number);
+    focusVerificationInput(nextEmpty === -1 ? 5 : nextEmpty);
+}
+
+function handleVerificationInput(event, index) {
+    const numbers = verificationNumbers(event.target.value);
+
+    if (numbers.length > 1) {
+        distributeVerificationCode(numbers, index);
         return;
     }
 
-    const next = input.nextElementSibling;
-
-    if (next) {
-        next.focus();
+    verificationDigits.value[index] = numbers;
+    event.target.value = numbers;
+    if (numbers && index < 5) {
+        focusVerificationInput(index + 1);
     }
 }
+
+function handleVerificationPaste(event, index) {
+    const numbers = verificationNumbers(event.clipboardData?.getData('text'));
+    if (!numbers) return;
+
+    event.preventDefault();
+    distributeVerificationCode(numbers, numbers.length === 6 ? 0 : index);
+}
+
+function handleVerificationKeydown(event, index) {
+    if (event.key === 'Backspace') {
+        event.preventDefault();
+        if (verificationDigits.value[index]) {
+            verificationDigits.value[index] = '';
+            focusVerificationInput(index);
+        } else if (index > 0) {
+            verificationDigits.value[index - 1] = '';
+            focusVerificationInput(index - 1);
+        }
+    } else if (event.key === 'Delete') {
+        event.preventDefault();
+        verificationDigits.value[index] = '';
+    } else if (event.key === 'ArrowLeft' && index > 0) {
+        event.preventDefault();
+        focusVerificationInput(index - 1);
+    } else if (event.key === 'ArrowRight' && index < 5) {
+        event.preventDefault();
+        focusVerificationInput(index + 1);
+    }
+}
+
+function toggleTheme() {
+    isDarkMode.value = !isDarkMode.value;
+    const theme = isDarkMode.value ? 'dark' : 'light';
+
+    document.documentElement.classList.remove('light', 'dark');
+    document.documentElement.classList.add(theme);
+    document.documentElement.dataset.ktThemeMode = theme;
+    document.documentElement.style.colorScheme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDarkMode.value ? '#09090b' : '#ffffff');
+    localStorage.setItem('kt-theme', theme);
+}
+
+onMounted(() => {
+    isDarkMode.value = document.documentElement.classList.contains('dark');
+});
 </script>
 
 <template>
+    <button class="waflow-auth-theme-toggle kt-btn kt-btn-icon kt-btn-outline" type="button" :aria-label="isDarkMode ? 'Usar tema claro' : 'Usar tema escuro'" :title="isDarkMode ? 'Usar tema claro' : 'Usar tema escuro'" @click="toggleTheme">
+        <i class="ki-filled" :class="isDarkMode ? 'ki-sun' : 'ki-moon'"></i>
+    </button>
+
     <div class="flex items-center justify-center grow w-full px-4 py-8">
         <div v-if="page === 'login'" class="kt-card waflow-auth-card-sm">
             <form :action="route('loginStore')" class="kt-card-content flex flex-col gap-5 p-10 waflow-auth-padding" method="post">
@@ -61,16 +149,16 @@ function movePinFocus(event) {
                     </div>
                 </div>
 
-                <div v-if="flash.status" class="kt-badge kt-badge-light kt-badge-success justify-center py-2">
+                <div v-if="flash.status" class="kt-alert kt-alert-light kt-alert-success text-sm" role="status">
                     {{ flash.status }}
                 </div>
-                <div v-if="errors.length" class="kt-badge kt-badge-light kt-badge-destructive justify-center py-2">
+                <div v-if="errors.length" class="kt-alert kt-alert-light kt-alert-destructive text-sm" role="alert">
                     {{ errors[0] }}
                 </div>
 
                 <div class="flex flex-col gap-1">
                     <label class="kt-form-label font-normal text-mono" for="email">Email</label>
-                    <input id="email" class="kt-input" name="email" placeholder="email@empresa.com" type="email" :value="oldValue('email')" required autofocus>
+                    <input id="email" v-model="loginEmail" class="kt-input" name="email" placeholder="email@empresa.com" type="email" autocomplete="email" required autofocus>
                 </div>
 
                 <div class="flex flex-col gap-1">
@@ -79,7 +167,7 @@ function movePinFocus(event) {
                         <a class="text-sm kt-link shrink-0" :href="route('passwordRequest')">Esqueci minha senha</a>
                     </div>
                     <div class="kt-input">
-                        <input id="password" name="password" placeholder="Digite sua senha" :type="showPassword ? 'text' : 'password'" required>
+                            <input id="password" v-model="loginPassword" name="password" placeholder="Digite sua senha" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" required>
                         <button class="kt-btn kt-btn-sm kt-btn-ghost kt-btn-icon bg-transparent! -me-1.5" type="button" aria-label="Alternar senha" @click="showPassword = !showPassword">
                             <i class="ki-filled text-muted-foreground" :class="showPassword ? 'ki-eye-slash' : 'ki-eye'"></i>
                         </button>
@@ -98,6 +186,7 @@ function movePinFocus(event) {
         <div v-else-if="page === 'register'" class="kt-card waflow-auth-card-md">
             <form :action="route('registerStore')" class="kt-card-content flex flex-col gap-5 p-10 waflow-auth-padding" method="post">
                 <input name="_token" type="hidden" :value="csrfToken">
+                <input v-if="data.partner?.code" name="partner_code" type="hidden" :value="data.partner.code">
 
                 <div class="text-center mb-2.5">
                     <div class="flex justify-center mb-5">
@@ -112,8 +201,11 @@ function movePinFocus(event) {
                     </div>
                 </div>
 
-                <div v-if="errors.length" class="kt-badge kt-badge-light kt-badge-destructive justify-center py-2">
+                <div v-if="errors.length" class="kt-alert kt-alert-light kt-alert-destructive text-sm" role="alert">
                     {{ errors[0] }}
+                </div>
+                <div v-if="data.partner" class="kt-alert kt-alert-light kt-alert-primary text-sm">
+                    Cadastro indicado por <strong>{{ data.partner.name }}</strong>. Sua empresa ficará vinculada a este parceiro comercial.
                 </div>
 
                 <div class="grid gap-4">
@@ -162,7 +254,7 @@ function movePinFocus(event) {
                     <p class="text-sm text-secondary-foreground">Informe o email da conta para receber o link de redefinição.</p>
                 </div>
 
-                <div v-if="errors.length" class="kt-badge kt-badge-light kt-badge-destructive justify-center py-2">
+                <div v-if="errors.length" class="kt-alert kt-alert-light kt-alert-destructive text-sm" role="alert">
                     {{ errors[0] }}
                 </div>
 
@@ -210,7 +302,7 @@ function movePinFocus(event) {
                     <p class="text-sm text-secondary-foreground">Crie uma senha nova para recuperar o acesso ao painel.</p>
                 </div>
 
-                <div v-if="errors.length" class="kt-badge kt-badge-light kt-badge-destructive justify-center py-2">
+                <div v-if="errors.length" class="kt-alert kt-alert-light kt-alert-destructive text-sm" role="alert">
                     {{ errors[0] }}
                 </div>
 
@@ -234,8 +326,8 @@ function movePinFocus(event) {
         <div v-else-if="page === 'two-factor'" class="kt-card waflow-auth-card-sm">
             <form :action="route('twoFactorStore')" class="kt-card-content flex flex-col gap-5 p-10 waflow-auth-padding" method="post">
                 <input name="_token" type="hidden" :value="csrfToken">
-                <img alt="" class="dark:hidden h-20 mb-2" :src="'/assets/media/illustrations/34.svg'">
-                <img alt="" class="light:hidden h-20 mb-2" :src="'/assets/media/illustrations/34-dark.svg'">
+                <!-- <img alt="" class="dark:hidden h-20 mb-2" :src="'/assets/media/illustrations/34.svg'"> -->
+                <!-- <img alt="" class="light:hidden h-20 mb-2" :src="'/assets/media/illustrations/34-dark.svg'"> -->
                 <div class="text-center mb-2">
                     <h3 class="text-lg font-medium text-mono mb-5">Verificação em duas etapas</h3>
                     <div class="flex flex-col">
@@ -243,11 +335,31 @@ function movePinFocus(event) {
                         <span class="text-sm font-medium text-mono">O código expira em 5 minutos.</span>
                     </div>
                 </div>
-                <div class="flex flex-wrap justify-center gap-2.5">
-                    <input v-for="index in 6" :key="index" :aria-label="`Dígito ${index} de 6`" :autocomplete="index === 1 ? 'one-time-code' : 'off'" class="kt-input focus:border-primary/10 focus:ring-3 focus:ring-primary/10 size-10 shrink-0 px-0 text-center" inputmode="numeric" maxlength="1" name="verification_code[]" type="text" @input="movePinFocus">
+                <input name="verification_code" type="hidden" :value="verificationDigits.join('')">
+                <div id="verification-code-label" class="sr-only">Código de verificação de 6 números</div>
+                <div class="waflow-verification-code" role="group" aria-labelledby="verification-code-label">
+                    <input
+                        v-for="(_, index) in verificationDigits"
+                        :key="index"
+                        :ref="(element) => setVerificationInput(element, index)"
+                        :value="verificationDigits[index]"
+                        :aria-label="`Dígito ${index + 1} de 6`"
+                        :autocomplete="index === 0 ? 'one-time-code' : 'off'"
+                        :autofocus="index === 0"
+                        class="kt-input waflow-verification-code-input"
+                        inputmode="numeric"
+                        maxlength="6"
+                        pattern="[0-9]*"
+                        required
+                        type="text"
+                        @focus="$event.target.select()"
+                        @input="handleVerificationInput($event, index)"
+                        @keydown="handleVerificationKeydown($event, index)"
+                        @paste="handleVerificationPaste($event, index)"
+                    >
                 </div>
-                <div v-if="flash.status" class="kt-badge kt-badge-light kt-badge-success justify-center py-2">{{ flash.status }}</div>
-                <div v-if="errors.length" class="kt-badge kt-badge-light kt-badge-destructive justify-center py-2">{{ errors[0] }}</div>
+                <div v-if="flash.status" class="kt-alert kt-alert-light kt-alert-success text-sm" role="status">{{ flash.status }}</div>
+                <div v-if="errors.length" class="kt-alert kt-alert-light kt-alert-destructive text-sm" role="alert">{{ errors[0] }}</div>
                 <button class="kt-btn kt-btn-primary flex justify-center grow" type="submit">Continuar</button>
             </form>
             <form :action="route('twoFactorResend')" class="px-10 pb-8 -mt-5" method="post">

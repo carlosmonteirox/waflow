@@ -103,4 +103,11 @@ class Workspace extends Model
     {
         return $this->hasMany(FlowExecution::class);
     }
+
+    public function partners(): BelongsToMany
+    {
+        return $this->belongsToMany(Partner::class, 'partner_workspaces')
+            ->withPivot(['status', 'commission_percent', 'referred_at'])
+            ->withTimestamps();
+    }
 }

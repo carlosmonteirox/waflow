@@ -44,15 +44,12 @@ class PanelController extends Controller
         'automation.completed',
     ];
 
-    public function dashboard(Request $request, WorkspaceContext $context, OpenWaClient $openWa): View
+    public function dashboard(Request $request, WorkspaceContext $context): View
     {
         $workspace = $context->forUser($request->user());
 
         return $this->render($request, $workspace, 'dashboard', 'Visão geral', 'Acompanhe a disponibilidade da plataforma e a operação do WhatsApp.', [
             'metrics' => $this->metrics($workspace),
-            'openWa' => $openWa->health(),
-            'databaseOnline' => $this->databaseOnline(),
-            'redisConfigured' => config('cache.default') === 'redis',
             'recentMessages' => $this->messageRows($workspace->messageEvents()->latest()->limit(6)->get()),
             'recentInstances' => $this->instanceRows($workspace->instances()->latest()->limit(5)->get()),
         ]);
@@ -88,21 +85,60 @@ class PanelController extends Controller
     public function messages(Request $request, WorkspaceContext $context): View
     {
         $workspace = $context->forUser($request->user());
-        $messages = $workspace->messageEvents()->with(['instance', 'contact'])->latest()->paginate(12);
+        $search = trim((string) $request->query('q', ''));
+        $status = trim((string) $request->query('status', ''));
+        $sort = in_array($request->query('sort'), ['created_at', 'direction', 'status'], true) ? $request->query('sort') : 'created_at';
+        $direction = $request->query('direction') === 'asc' ? 'asc' : 'desc';
+        $query = $workspace->messageEvents()->with(['instance', 'contact']);
+
+        if ($search !== '') {
+            $term = '%'.Str::lower($search).'%';
+            $query->where(function ($builder) use ($term): void {
+                $builder->whereRaw('LOWER("from") LIKE ?', [$term])
+                    ->orWhereRaw('LOWER("to") LIKE ?', [$term])
+                    ->orWhereRaw('LOWER(status) LIKE ?', [$term])
+                    ->orWhereHas('instance', fn ($instanceQuery) => $instanceQuery->whereRaw('LOWER(name) LIKE ?', [$term]))
+                    ->orWhereHas('contact', fn ($contactQuery) => $contactQuery->whereRaw('LOWER(name) LIKE ?', [$term]));
+            });
+        }
+
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        $messages = $query->orderBy($sort, $direction)->paginate(12)->withQueryString();
+        $statuses = $workspace->messageEvents()->select('status')->distinct()->orderBy('status')->pluck('status')->values()->all();
 
         return $this->render($request, $workspace, 'messages', 'Mensagens', 'Consulte eventos processados e mensagens enfileiradas.', [
             'messages' => $this->paginatedRows($messages, fn ($message): array => $this->messageRow($message)),
             'instances' => $this->instanceRows($workspace->instances()->latest()->get()),
+            'filters' => compact('search', 'status', 'sort', 'direction'),
+            'statuses' => $statuses,
         ]);
     }
 
     public function contacts(Request $request, WorkspaceContext $context): View
     {
         $workspace = $context->forUser($request->user());
-        $contacts = $workspace->contacts()->latest()->paginate(12);
+        $search = trim((string) $request->query('q', ''));
+        $sort = in_array($request->query('sort'), ['created_at', 'name', 'phone_number', 'last_seen_at'], true) ? $request->query('sort') : 'created_at';
+        $direction = $request->query('direction') === 'asc' ? 'asc' : 'desc';
+        $query = $workspace->contacts();
+
+        if ($search !== '') {
+            $term = '%'.Str::lower($search).'%';
+            $query->where(function ($builder) use ($term): void {
+                $builder->whereRaw('LOWER(name) LIKE ?', [$term])
+                    ->orWhereRaw('LOWER(phone_number) LIKE ?', [$term])
+                    ->orWhereRaw('LOWER(wa_id) LIKE ?', [$term]);
+            });
+        }
+
+        $contacts = $query->orderBy($sort, $direction)->paginate(12)->withQueryString();
 
         return $this->render($request, $workspace, 'contacts', 'Contatos', 'Base de contatos capturados ou importados por API.', [
             'contacts' => $this->paginatedRows($contacts, fn ($contact): array => $this->contactRow($contact)),
+            'filters' => compact('search', 'sort', 'direction'),
         ]);
     }
 
@@ -110,7 +146,7 @@ class PanelController extends Controller
     {
         $workspace = $context->forUser($request->user());
 
-        return $this->render($request, $workspace, 'portals', 'Portais', 'Gerencie os sites autorizados a operar com este workspace.', [
+        return $this->render($request, $workspace, 'portals', 'Sites/Domínios', 'Gerencie sites e domínios autorizados a operar com este workspace.', [
             'portals' => $workspace->portals()->latest()->get()->map(fn ($portal): array => [
                 'uuid' => $portal->uuid,
                 'name' => $portal->name,
@@ -252,7 +288,8 @@ class PanelController extends Controller
         $model = $workspace->instances()->where('uuid', $instance)->firstOrFail();
         $instances->connect($model);
 
-        return back()->with('status', 'Conexão iniciada. Leia o QR Code exibido.');
+        return redirect()->route('panel.instances', ['qr' => $model->uuid])
+            ->with('status', 'Conexão iniciada. Leia o QR Code exibido.');
     }
 
     public function disconnectInstance(
@@ -414,7 +451,7 @@ class PanelController extends Controller
         });
 
         return redirect()->route('panel.portals')
-            ->with('status', 'Portal adicionado. Use o token abaixo para verificá-lo.')
+            ->with('status', 'Site/domínio adicionado. Use o token abaixo para verificá-lo.')
             ->with('portal_verification_token', $plainToken);
     }
 
@@ -427,7 +464,7 @@ class PanelController extends Controller
         abort_unless(hash_equals($portal->verification_token, hash('sha256', $attributes['verification_token'])), 422, 'Token de verificação inválido.');
         $portal->update(['status' => 'verified', 'verified_at' => now()]);
 
-        return back()->with('status', 'Portal verificado.');
+        return back()->with('status', 'Site/domínio verificado.');
     }
 
     public function destroyPortal(Request $request, WorkspaceContext $context, Portal $portal): RedirectResponse
@@ -437,7 +474,7 @@ class PanelController extends Controller
         abort_unless($portal->workspace_id === $workspace->id, 404);
         $portal->delete();
 
-        return back()->with('status', 'Portal removido.');
+        return back()->with('status', 'Site/domínio removido.');
     }
 
     public function storeWebhook(Request $request, WorkspaceContext $context, UsageLimiter $limiter): RedirectResponse
@@ -600,6 +637,7 @@ class PanelController extends Controller
         return view('panel.'.$page, [
             'title' => $title,
             'appPayload' => [
+                'console' => 'client',
                 'page' => $page,
                 'title' => $title,
                 'description' => $description,
@@ -614,9 +652,18 @@ class PanelController extends Controller
                 ])->values()->all(),
                 'plan' => $this->planPayload($plan),
                 'usage' => $this->usage($workspace),
+                'platformHealth' => [
+                    'openWa' => app(OpenWaClient::class)->health(),
+                    'databaseOnline' => $this->databaseOnline(),
+                    'redisConfigured' => config('cache.default') === 'redis',
+                ],
                 'navSections' => $this->navSections($request),
                 'user' => $this->userPayload($request->user()),
                 'routes' => $this->routesPayload(),
+                'contextLinks' => array_values(array_filter([
+                    $request->user()->is_platform_admin ? ['label' => 'Administração Waflow', 'icon' => 'ki-security-user', 'url' => route('admin.dashboard')] : null,
+                    $request->user()->partners()->wherePivot('status', 'active')->exists() ? ['label' => 'Painel do parceiro', 'icon' => 'ki-shop', 'url' => route('partner.dashboard')] : null,
+                ])),
                 'data' => $data,
             ],
         ]);
@@ -806,7 +853,7 @@ class PanelController extends Controller
                     ['label' => 'Fluxos', 'route' => 'panel.flows', 'icon' => 'ki-route'],
                     ['label' => 'Mensagens', 'route' => 'panel.messages', 'icon' => 'ki-messages'],
                     ['label' => 'Contatos', 'route' => 'panel.contacts', 'icon' => 'ki-profile-circle'],
-                    ['label' => 'Portais', 'route' => 'panel.portals', 'icon' => 'ki-global'],
+                    ['label' => 'Sites/Domínios', 'route' => 'panel.portals', 'icon' => 'ki-geolocation'],
                 ],
             ],
             [
@@ -973,8 +1020,8 @@ class PanelController extends Controller
     private function paginatedRows($paginator, callable $mapper): array
     {
         $links = collect($paginator->linkCollection())->map(function (array $link): array {
-            $label = strip_tags((string) $link['label']);
-            $label = str_replace(['&laquo; Previous', 'Next &raquo;', 'Previous', 'Next'], ['Anterior', 'Próxima', 'Anterior', 'Próxima'], $label);
+            $label = html_entity_decode(strip_tags((string) $link['label']), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $label = str_replace(['« Previous', 'Next »', 'Previous', 'Next'], ['Anterior', 'Próxima', 'Anterior', 'Próxima'], $label);
 
             return [
                 'url' => $link['url'],

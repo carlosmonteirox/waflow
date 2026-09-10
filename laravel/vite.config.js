@@ -1,9 +1,10 @@
-import { defineConfig } from 'vite';
+import { defaultAllowedOrigins, defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 
 const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT || 5173);
+const appUrl = process.env.APP_URL;
 
 export default defineConfig({
     plugins: [
@@ -23,6 +24,12 @@ export default defineConfig({
     ],
     server: {
         origin: process.env.VITE_DEV_SERVER_URL,
+        cors: {
+            origin: [
+                defaultAllowedOrigins,
+                ...(appUrl ? [appUrl] : []),
+            ],
+        },
         hmr: process.env.VITE_HMR_HOST
             ? {
                 host: process.env.VITE_HMR_HOST,

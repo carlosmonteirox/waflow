@@ -6,6 +6,8 @@
         'webhookSecret' => session('created_webhook_secret'),
         'portalToken' => session('portal_verification_token'),
         'errors' => $errors->all(),
+        'fieldErrors' => $errors->getMessages(),
+        'old' => old(),
     ];
 @endphp
 

@@ -35,7 +35,7 @@ const { pageData } = usePanelContext(props);
                 </table></div></div>
             </div>
             <div class="waflow-card-stack">
-                <div class="kt-card"><div class="kt-card-header"><h3 class="kt-card-title">Autenticação</h3></div><div class="kt-card-content p-5 grid gap-3"><div class="text-sm text-secondary-foreground">Bearer token</div><code class="waflow-code">Authorization: Bearer waflow_xxxxxxxxxxxxxxxxx</code><div class="text-sm text-secondary-foreground">Header alternativo</div><code class="waflow-code">X-Waflow-Key: waflow_xxxxxxxxxxxxxxxxx</code><a class="kt-btn kt-btn-primary justify-center" :href="pageData.openapi_url">Baixar OpenAPI 3.1</a></div></div>
+                <div class="kt-card"><div class="kt-card-header"><h3 class="kt-card-title">Autenticação</h3></div><div class="kt-card-content p-5 grid gap-3"><div class="text-sm text-secondary-foreground">Bearer token</div><code class="waflow-code">Authorization: Bearer waflow_xxxxxxxxxxxxxxxxx</code><div class="text-sm text-secondary-foreground">Header alternativo</div><code class="waflow-code">X-Waflow-Key: waflow_xxxxxxxxxxxxxxxxx</code><a class="kt-btn kt-btn-primary justify-center" :href="pageData.openapi_url" download>Baixar OpenAPI 3.1</a></div></div>
                 <div class="kt-card"><div class="kt-card-header"><h3 class="kt-card-title">Exemplo</h3></div><div class="kt-card-content p-5"><code class="waflow-code">curl -X POST {{ pageData.messages_endpoint }}
   -H "Authorization: Bearer waflow_xxx"
   -H "Content-Type: application/json"

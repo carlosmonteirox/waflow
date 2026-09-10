@@ -35,6 +35,7 @@ class WorkspaceContext
             $name = $workspaceName ?: 'Workspace de '.$user->name;
 
             $workspace = Workspace::query()->create([
+                'uuid' => (string) Str::uuid(),
                 'owner_id' => $user->id,
                 'name' => $name,
                 'slug' => $this->uniqueWorkspaceSlug($name),

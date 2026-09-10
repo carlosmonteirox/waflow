@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ApiKey;
+use App\Models\Partner;
 use App\Models\Portal;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -36,6 +37,12 @@ class RegistrationService
                 'trial_started_at' => now(),
             ]);
             $workspace = $this->workspaces->createForUser($user, $attributes['workspace_name'] ?? null);
+            $partner = filled($attributes['partner_code'] ?? null)
+                ? Partner::query()->where('referral_code', $attributes['partner_code'])->where('status', 'active')->first()
+                : null;
+            $partner?->workspaces()->syncWithoutDetaching([
+                $workspace->id => ['status' => 'active', 'referred_at' => now()],
+            ]);
             $issued = $issueApiKey ? ApiKey::issue($workspace, 'Chave inicial', ['*']) : null;
             $portalToken = null;
 
@@ -55,7 +62,7 @@ class RegistrationService
                 'user_agent_hash' => $request->userAgent() ? hash('sha256', $request->userAgent()) : null,
             ]);
 
-            return compact('user', 'workspace', 'issued', 'portalToken');
+            return compact('user', 'workspace', 'issued', 'portalToken', 'partner');
         });
 
         $result['user']->sendEmailVerificationNotification();

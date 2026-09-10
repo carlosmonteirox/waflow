@@ -15,6 +15,8 @@ services:
 
   laravel:
     volumes: *laravel-dev-volumes
+    environment:
+      WAFLOW_LOG_TWO_FACTOR_CODES: "true"
 
   migrate:
     volumes: *laravel-dev-volumes

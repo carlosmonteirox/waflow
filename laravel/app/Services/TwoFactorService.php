@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Notifications\TwoFactorCodeNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class TwoFactorService
@@ -32,6 +33,14 @@ class TwoFactorService
         });
 
         $user->notify(new TwoFactorCodeNotification($plainCode));
+
+        if (config('waflow.two_factor.log_codes', false)) {
+            Log::channel('mail')->info('Waflow sandbox 2FA code issued.', [
+                'email' => $user->email,
+                'code' => $plainCode,
+                'expires_at' => $code->expires_at->toIso8601String(),
+            ]);
+        }
 
         return $code;
     }

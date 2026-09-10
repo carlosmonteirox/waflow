@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\LoginDestination;
 use App\Services\TwoFactorService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,7 +23,7 @@ class TwoFactorPromptController extends Controller
         return view('auth.two-factor');
     }
 
-    public function store(Request $request, TwoFactorService $twoFactor): RedirectResponse
+    public function store(Request $request, TwoFactorService $twoFactor, LoginDestination $destination): RedirectResponse
     {
         $user = $this->pendingUser($request);
         $input = $request->input('verification_code', $request->input('code'));
@@ -39,7 +40,9 @@ class TwoFactorPromptController extends Controller
         Auth::login($user, $remember);
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard'));
+        $request->session()->forget('url.intended');
+
+        return redirect()->to($destination->for($user));
     }
 
     public function resend(Request $request, TwoFactorService $twoFactor): RedirectResponse

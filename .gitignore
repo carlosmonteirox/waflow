@@ -12,9 +12,18 @@ Thumbs.db
 .env.*
 !.env.example
 !.env.minimal
+*.key
+*.crt
+*.cer
+*.der
 *.pem
 *.p12
 *.pfx
+*.jks
+*.keystore
+auth.json
+.npmrc
+.yarnrc
 
 # Dependencies
 node_modules/
@@ -26,6 +35,12 @@ build/
 coverage/
 public/build/
 public/hot
+.cache/
+.eslintcache
+.turbo/
+.vite/
+test-results/
+playwright-report/
 .phpunit.cache/
 .phpunit.result.cache
 
@@ -35,6 +50,8 @@ public/hot
 *.tmp
 *.temp
 *.bak
+*.orig
+*.rej
 
 # Runtime data
 *.db
@@ -50,3 +67,6 @@ public/hot
 /infra/.env
 /infra/secrets/*
 !/infra/secrets/.gitignore
+
+# Local design-kit reference exports (not used by the application runtime)
+/sample/html/demo1/

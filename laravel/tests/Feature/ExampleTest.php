@@ -137,8 +137,14 @@ class ExampleTest extends TestCase
         $this->artisan('db:seed')->assertExitCode(0);
         $this->artisan('db:seed')->assertExitCode(0);
 
-        $this->assertDatabaseCount('users', 1);
-        $this->assertDatabaseCount('workspaces', 1);
+        $this->assertDatabaseCount('users', 9);
+        $this->assertDatabaseCount('workspaces', 2);
         $this->assertDatabaseCount('whatsapp_instances', 1);
+        $this->assertDatabaseCount('partners', 1);
+        $this->assertDatabaseCount('partner_members', 4);
+        $this->assertDatabaseMissing('workspaces', ['uuid' => null]);
+
+        $client = User::query()->where('email', 'client@waflow.local')->firstOrFail();
+        $this->actingAs($client)->get(route('dashboard'))->assertOk();
     }
 }

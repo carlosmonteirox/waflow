@@ -31,4 +31,7 @@ return [
             'api-keys:read', 'api-keys:write', 'team:read', 'team:write',
         ],
     ],
+    'two_factor' => [
+        'log_codes' => (bool) env('WAFLOW_LOG_TWO_FACTOR_CODES', false),
+    ],
 ];

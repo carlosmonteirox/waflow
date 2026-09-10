@@ -9,6 +9,8 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\TwoFactorPromptController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\Panel\PanelController;
+use App\Http\Controllers\Partner\PartnerController;
+use App\Http\Controllers\Platform\AdminController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -82,5 +84,32 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/billing/subscription/resume', [PanelController::class, 'resumeSubscription'])->name('panel.billing.resume');
         Route::get('/settings', [PanelController::class, 'settings'])->name('panel.settings');
         Route::patch('/settings', [PanelController::class, 'updateSettings'])->name('panel.settings.update');
+
+        Route::prefix('admin')->as('admin.')->middleware('platform.admin')->group(function (): void {
+            Route::get('/', [AdminController::class, 'dashboard'])->name('dashboard');
+            Route::get('/companies', [AdminController::class, 'companies'])->name('companies');
+            Route::post('/companies/{workspace}/status', [AdminController::class, 'updateWorkspaceStatus'])->name('companies.status');
+            Route::get('/users', [AdminController::class, 'users'])->name('users');
+            Route::post('/users/{user}/admin', [AdminController::class, 'updateUserAdmin'])->name('users.admin');
+            Route::get('/partners', [AdminController::class, 'partners'])->name('partners');
+            Route::post('/partners', [AdminController::class, 'storePartner'])->name('partners.store');
+            Route::post('/partners/{partner}/status', [AdminController::class, 'updatePartnerStatus'])->name('partners.status');
+            Route::get('/plans', [AdminController::class, 'plans'])->name('plans');
+            Route::post('/plans', [AdminController::class, 'storePlan'])->name('plans.store');
+            Route::patch('/plans/{plan}', [AdminController::class, 'updatePlan'])->name('plans.update');
+            Route::get('/subscriptions', [AdminController::class, 'subscriptions'])->name('subscriptions');
+            Route::patch('/subscriptions/{subscription}', [AdminController::class, 'updateSubscription'])->name('subscriptions.update');
+        });
+
+        Route::prefix('partner')->as('partner.')->middleware('partner.member')->group(function (): void {
+            Route::get('/', [PartnerController::class, 'dashboard'])->name('dashboard');
+            Route::post('/select/{partner}', [PartnerController::class, 'switchPartner'])->name('select');
+            Route::get('/customers', [PartnerController::class, 'customers'])->name('customers');
+            Route::get('/finance', [PartnerController::class, 'finance'])->name('finance');
+            Route::get('/settings', [PartnerController::class, 'settings'])->name('settings');
+            Route::patch('/settings', [PartnerController::class, 'updateSettings'])->name('settings.update');
+            Route::post('/members', [PartnerController::class, 'storeMember'])->name('members.store');
+            Route::delete('/members/{member}', [PartnerController::class, 'destroyMember'])->name('members.destroy');
+        });
     });
 });

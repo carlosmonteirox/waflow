@@ -5,6 +5,8 @@ use App\Exceptions\OpenWaException;
 use App\Http\Middleware\AttachRequestId;
 use App\Http\Middleware\AuthenticateApiKey;
 use App\Http\Middleware\EnsureApiAbility;
+use App\Http\Middleware\EnsurePartnerMember;
+use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\EnsureWorkspaceActive;
 use App\Http\Middleware\LogApiRequest;
 use App\Support\ApiResponse;
@@ -34,6 +36,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'waflow.subscription' => EnsureWorkspaceActive::class,
             'waflow.ability' => EnsureApiAbility::class,
             'waflow.audit' => LogApiRequest::class,
+            'platform.admin' => EnsurePlatformAdmin::class,
+            'partner.member' => EnsurePartnerMember::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

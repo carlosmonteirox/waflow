@@ -19,6 +19,7 @@ export function usePanelContext(props) {
         workspaces: computed(() => payload.value.workspaces || []),
         permissions: computed(() => workspace.value.permissions || {}),
         plan: computed(() => payload.value.plan || { name: 'Growth', features: [] }),
+        platformHealth: computed(() => payload.value.platformHealth || {}),
         user: computed(() => payload.value.user || {}),
         usage: computed(() => payload.value.usage || {}),
         navSections: computed(() => payload.value.navSections || []),

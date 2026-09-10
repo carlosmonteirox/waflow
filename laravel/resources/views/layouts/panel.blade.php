@@ -4,6 +4,7 @@
     <title>{{ $title ?? 'Painel' }} | Waflow</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="theme-color" content="#ffffff">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link href="{{ asset('assets/media/app/apple-touch-icon.png') }}" rel="apple-touch-icon" sizes="180x180">
     <link href="{{ asset('assets/media/app/favicon-32x32.png') }}" rel="icon" sizes="32x32" type="image/png">
@@ -16,25 +17,16 @@
 </head>
 <body class="antialiased flex h-full text-base text-foreground bg-background demo1 kt-sidebar-fixed kt-header-fixed">
     <script>
-        const defaultThemeMode = 'light';
-        let themeMode;
-        localStorage.setItem('kt-theme', defaultThemeMode);
+        const storedThemeMode = localStorage.getItem('kt-theme') || 'system';
+        const themeMode = storedThemeMode === 'system'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : storedThemeMode;
 
-        if (document.documentElement) {
-            if (localStorage.getItem('kt-theme')) {
-                themeMode = localStorage.getItem('kt-theme');
-            } else if (document.documentElement.hasAttribute('data-kt-theme-mode')) {
-                themeMode = document.documentElement.getAttribute('data-kt-theme-mode');
-            } else {
-                themeMode = defaultThemeMode;
-            }
-
-            if (themeMode === 'system') {
-                themeMode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            }
-
-            document.documentElement.classList.add(themeMode);
-        }
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(themeMode);
+        document.documentElement.dataset.ktThemeMode = themeMode;
+        document.documentElement.style.colorScheme = themeMode;
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeMode === 'dark' ? '#09090b' : '#ffffff');
     </script>
 
     @yield('content')

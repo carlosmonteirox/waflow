@@ -13,7 +13,10 @@ use App\Services\WorkspaceContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Mockery;
+use Psr\Log\LoggerInterface;
 use Tests\TestCase;
 
 class PlatformExpansionTest extends TestCase
@@ -23,6 +26,7 @@ class PlatformExpansionTest extends TestCase
     public function test_login_requires_a_six_digit_email_code_that_expires_in_five_minutes(): void
     {
         Notification::fake();
+        Log::shouldReceive('channel')->never();
         $user = User::factory()->create([
             'email' => 'secure@example.com',
             'email_verified_at' => now(),
@@ -49,6 +53,30 @@ class PlatformExpansionTest extends TestCase
         $this->assertAuthenticatedAs($user);
         $this->assertNotNull($issued->fresh()->consumed_at);
         $this->assertNotNull($user->fresh()->last_two_factor_at);
+    }
+
+    public function test_sandbox_login_logs_the_two_factor_code_when_explicitly_enabled(): void
+    {
+        Notification::fake();
+        config()->set('waflow.two_factor.log_codes', true);
+
+        $logger = Mockery::mock(LoggerInterface::class);
+        $logger->shouldReceive('info')
+            ->once()
+            ->with('Waflow sandbox 2FA code issued.', Mockery::on(
+                fn (array $context): bool => $context['email'] === 'sandbox@example.com'
+                    && preg_match('/^\d{6}$/', $context['code']) === 1
+                    && is_string($context['expires_at']),
+            ));
+        Log::shouldReceive('channel')->once()->with('mail')->andReturn($logger);
+
+        $user = User::factory()->create([
+            'email' => 'sandbox@example.com',
+            'password' => Hash::make('password123'),
+        ]);
+
+        $this->post('/login', ['email' => $user->email, 'password' => 'password123'])
+            ->assertRedirect(route('two-factor.challenge'));
     }
 
     public function test_expired_and_incorrect_two_factor_codes_are_rejected(): void
@@ -340,6 +368,41 @@ class PlatformExpansionTest extends TestCase
 
         $this->assertFileExists(resource_path('js/panel/PanelShell.vue'));
         $this->assertFileDoesNotExist(resource_path('js/components/PanelApp.vue'));
+    }
+
+    public function test_panel_lists_filter_sort_and_preserve_their_query_state(): void
+    {
+        [$user, $workspace] = $this->workspaceWithKey();
+        Contact::query()->create(['workspace_id' => $workspace->id, 'name' => 'Ana Lima', 'phone_number' => '551100000001']);
+        Contact::query()->create(['workspace_id' => $workspace->id, 'name' => 'Bruno Alves', 'phone_number' => '551100000002']);
+        MessageEvent::query()->create([
+            'workspace_id' => $workspace->id,
+            'direction' => 'outbound',
+            'status' => 'failed',
+            'to' => '551100000001',
+            'payload' => ['text' => 'Falha de teste'],
+        ]);
+        MessageEvent::query()->create([
+            'workspace_id' => $workspace->id,
+            'direction' => 'inbound',
+            'status' => 'delivered',
+            'from' => '551100000002',
+            'payload' => ['text' => 'Mensagem entregue'],
+        ]);
+
+        $this->actingAs($user)->get(route('panel.contacts', ['q' => 'ana', 'sort' => 'name', 'direction' => 'asc']))
+            ->assertOk()
+            ->assertSee('Ana Lima')
+            ->assertDontSee('Bruno Alves')
+            ->assertSee('"search":"ana"', false)
+            ->assertSee('"sort":"name"', false);
+
+        $this->actingAs($user)->get(route('panel.messages', ['status' => 'failed', 'sort' => 'status', 'direction' => 'asc']))
+            ->assertOk()
+            ->assertSee('Falha de teste')
+            ->assertDontSee('Mensagem entregue')
+            ->assertSee('"status":"failed"', false)
+            ->assertSee('"sort":"status"', false);
     }
 
     public function test_waflow_openapi_document_is_public_and_valid_yaml(): void
