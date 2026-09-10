@@ -3,9 +3,7 @@ import * as path from 'path';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IWhatsAppEngine } from './interfaces/whatsapp-engine.interface';
-import { WhatsAppWebJsAdapter } from './adapters/whatsapp-web-js.adapter';
 import { PluginLoaderService, PluginType, IEnginePlugin, PluginManifest } from '../core/plugins';
-import { WhatsAppWebJsPlugin } from '../plugins/engines/whatsapp-web-js';
 import { BaileysPlugin } from '../plugins/engines/baileys';
 import { createLogger } from '../common/services/logger.service';
 import { BaileysMessageStoreService } from './adapters/baileys-message-store.service';
@@ -60,8 +58,18 @@ export class EngineFactory implements OnModuleInit {
       provides: ['whatsapp-engine'],
     };
 
-    const wwjsPlugin = new WhatsAppWebJsPlugin(engineConfig, this.lidMappingStore);
-    this.pluginLoader.registerBuiltInPlugin(wwjsManifest, wwjsPlugin, engineConfig);
+    try {
+      const { WhatsAppWebJsPlugin } = await import('../plugins/engines/whatsapp-web-js/index.js');
+      const wwjsPlugin = new WhatsAppWebJsPlugin(engineConfig, this.lidMappingStore);
+      this.pluginLoader.registerBuiltInPlugin(wwjsManifest, wwjsPlugin, engineConfig);
+    } catch (error) {
+      if (this.engineType === 'whatsapp-web.js') {
+        throw new Error('The optional whatsapp-web.js engine is not installed.', { cause: error });
+      }
+      this.logger.warn('Optional whatsapp-web.js engine is not installed; continuing with Baileys only', {
+        action: 'optional_engine_unavailable',
+      });
+    }
 
     // Register Baileys as a second built-in engine plugin. Same opaque engine blob; the plugin
     // reads only its own namespace (baileys.authDir) from context.config.
@@ -182,6 +190,12 @@ export class EngineFactory implements OnModuleInit {
         `Engine '${this.engineType}' is unavailable and has no direct fallback; cannot start the session.`,
       );
     }
+
+    // Optional in Baileys-only production images; loaded only when explicitly selected.
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const { WhatsAppWebJsAdapter } =
+      require('./adapters/whatsapp-web-js.adapter') as typeof import('./adapters/whatsapp-web-js.adapter');
+    /* eslint-enable @typescript-eslint/no-require-imports */
 
     // Legacy direct creation (fallback)
     return new WhatsAppWebJsAdapter({

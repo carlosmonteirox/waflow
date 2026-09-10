@@ -51,6 +51,7 @@ FROM docker.io/node:22-slim AS production
 # arm64 installs Debian's chromium instead (it ships a native arm64 build). Both
 # resolve to the same /usr/local/bin/puppeteer-chrome symlink below.
 ARG TARGETARCH
+ARG WAFLOW_BAILEYS_ONLY=false
 RUN apt-get update && apt-get install -y \
     $([ "$TARGETARCH" = arm64 ] && echo chromium) \
     fonts-liberation \
@@ -94,12 +95,20 @@ COPY package*.json ./
 COPY scripts/patch-wwebjs-201832.js scripts/wwebjs-201832.patch ./scripts/
 
 # Install production dependencies only, then apply the backport patcher (needs `patch`).
-RUN npm ci --omit=dev && node scripts/patch-wwebjs-201832.js && npm cache clean --force
+RUN npm ci --omit=dev \
+    && if [ "$WAFLOW_BAILEYS_ONLY" = "true" ]; then \
+        npm uninstall --no-save --ignore-scripts whatsapp-web.js; \
+    else \
+        node scripts/patch-wwebjs-201832.js; \
+    fi \
+    && npm cache clean --force
 
 # amd64: download Chrome for Testing via Puppeteer and symlink it.
 # arm64: use Debian's chromium installed above (CfT has no linux-arm64 build).
 # test -n guards against a future path mismatch failing loudly instead of shipping a broken image.
-RUN if [ "$TARGETARCH" = arm64 ]; then \
+RUN if [ "$WAFLOW_BAILEYS_ONLY" = "true" ]; then \
+        printf '%s\n' 'Baileys-only image: Chromium installation skipped'; \
+    elif [ "$TARGETARCH" = arm64 ]; then \
         ln -s /usr/bin/chromium /usr/local/bin/puppeteer-chrome; \
     else \
         mkdir -p /opt/puppeteer && \

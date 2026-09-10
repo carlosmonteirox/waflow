@@ -185,6 +185,8 @@ services:
     build:
       context: ../openwa
       dockerfile: Dockerfile
+      args:
+        WAFLOW_BAILEYS_ONLY: "true"
     image: waflow/openwa:${WAFLOW_VERSION:-local}
     restart: unless-stopped
     init: true
