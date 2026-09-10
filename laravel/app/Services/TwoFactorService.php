@@ -66,7 +66,7 @@ class TwoFactorService
             }
 
             $code->update(['consumed_at' => now()]);
-            $user->update(['last_two_factor_at' => now()]);
+            $user->forceFill(['last_two_factor_at' => now()])->save();
 
             return true;
         }, 3);

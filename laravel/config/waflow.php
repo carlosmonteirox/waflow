@@ -22,6 +22,12 @@ return [
     ],
     'api' => [
         'requests_per_minute' => (int) env('WAFLOW_API_REQUESTS_PER_MINUTE', 120),
+        'authentication_attempts_per_ip' => (int) env('WAFLOW_API_AUTH_ATTEMPTS_PER_IP', 300),
+        'authentication_attempts_per_credential' => (int) env('WAFLOW_API_AUTH_ATTEMPTS_PER_CREDENTIAL', 120),
+        'message_writes_per_minute' => (int) env('WAFLOW_MESSAGE_WRITES_PER_MINUTE', 60),
+        'bulk_requests_per_minute' => (int) env('WAFLOW_BULK_REQUESTS_PER_MINUTE', 10),
+        'sensitive_writes_per_minute' => (int) env('WAFLOW_SENSITIVE_WRITES_PER_MINUTE', 20),
+        'max_base64_bytes' => (int) env('WAFLOW_MAX_BASE64_BYTES', 10 * 1024 * 1024),
         'allowed_abilities' => [
             'workspace:read', 'workspace:write', 'instances:read', 'instances:write',
             'messages:read', 'messages:write', 'contacts:read', 'contacts:write',
@@ -30,6 +36,11 @@ return [
             'portals:read', 'portals:write', 'billing:read', 'billing:write',
             'api-keys:read', 'api-keys:write', 'team:read', 'team:write',
         ],
+    ],
+    'webhooks' => [
+        'openwa_requests_per_minute' => (int) env('WAFLOW_OPENWA_WEBHOOK_REQUESTS_PER_MINUTE', 300),
+        'inter_requests_per_minute' => (int) env('WAFLOW_INTER_WEBHOOK_REQUESTS_PER_MINUTE', 60),
+        'max_payload_bytes' => (int) env('WAFLOW_WEBHOOK_MAX_PAYLOAD_BYTES', 1024 * 1024),
     ],
     'two_factor' => [
         'log_codes' => (bool) env('WAFLOW_LOG_TWO_FACTOR_CODES', false),

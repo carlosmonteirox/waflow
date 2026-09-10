@@ -25,8 +25,8 @@ class ExampleTest extends TestCase
             'name' => 'Carlos Monteiro',
             'workspace_name' => 'Acme Atendimento',
             'email' => 'carlos@example.com',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Strong-password-123',
+            'password_confirmation' => 'Strong-password-123',
         ]);
 
         $response->assertRedirect(route('verification.notice'));
@@ -42,8 +42,8 @@ class ExampleTest extends TestCase
             'name' => 'Carlos Monteiro',
             'workspace_name' => 'Acme Atendimento',
             'email' => 'carlos@example.com',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Strong-password-123',
+            'password_confirmation' => 'Strong-password-123',
         ]);
 
         $user = User::query()->where('email', 'carlos@example.com')->firstOrFail();

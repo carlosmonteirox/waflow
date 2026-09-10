@@ -123,8 +123,8 @@ class PlatformAdminPartnerTest extends TestCase
             'name' => 'Cliente Indicado',
             'workspace_name' => 'Empresa Indicada',
             'email' => 'cliente@indicado.test',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Strong-password-123',
+            'password_confirmation' => 'Strong-password-123',
             'partner_code' => $partner->referral_code,
         ])->assertRedirect(route('verification.notice'));
 
@@ -162,8 +162,8 @@ class PlatformAdminPartnerTest extends TestCase
             'name' => 'Cliente Bloqueado',
             'workspace_name' => 'Empresa Bloqueada',
             'email' => 'cliente@bloqueado.test',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Strong-password-123',
+            'password_confirmation' => 'Strong-password-123',
             'partner_code' => 'sus123',
         ])->assertSessionHasErrors('partner_code');
 

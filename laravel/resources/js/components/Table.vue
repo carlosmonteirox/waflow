@@ -206,7 +206,7 @@
               </div>
 
               <!-- Texto comum -->
-              <span v-if="t.tipo === 'texto'" v-html="comQuebraLinha(obj[chaveValor])"></span>
+              <span v-if="t.tipo === 'texto'" class="whitespace-pre-line">{{ obj[chaveValor] }}</span>
 
               <!-- Número com pontuação (1, 10, 200, 3.000, 10.500, etc) -->
               <span v-else-if="t.tipo === 'number'">

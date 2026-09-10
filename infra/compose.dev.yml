@@ -17,6 +17,7 @@ services:
     volumes: *laravel-dev-volumes
     environment:
       WAFLOW_LOG_TWO_FACTOR_CODES: "true"
+      SESSION_SECURE_COOKIE: "false"
 
   migrate:
     volumes: *laravel-dev-volumes

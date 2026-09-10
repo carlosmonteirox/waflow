@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\WebhookDelivery;
+use App\Services\PublicWebhookTarget;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
@@ -18,7 +19,7 @@ class DeliverWorkspaceWebhook implements ShouldQueue
 
     public function __construct(public readonly int $deliveryId, public readonly array $payload) {}
 
-    public function handle(): void
+    public function handle(PublicWebhookTarget $target): void
     {
         $delivery = WebhookDelivery::query()->with('webhook')->findOrFail($this->deliveryId);
         $webhook = $delivery->webhook;
@@ -29,7 +30,7 @@ class DeliverWorkspaceWebhook implements ShouldQueue
         $signature = 'sha256='.hash_hmac('sha256', $body, $webhook->signing_secret);
 
         try {
-            $response = Http::withOptions(['allow_redirects' => false])
+            $response = Http::withOptions($target->requestOptions($webhook->url, ! app()->environment('testing')))
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'User-Agent' => 'Waflow-Webhook/1.0',

@@ -8,6 +8,7 @@ use App\Http\Middleware\EnsureApiAbility;
 use App\Http\Middleware\EnsurePartnerMember;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\EnsureWorkspaceActive;
+use App\Http\Middleware\LimitRequestBodySize;
 use App\Http\Middleware\LogApiRequest;
 use App\Support\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -28,14 +29,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // The PHP application is only reachable through the internal Nginx service.
-        $middleware->trustProxies(at: '*');
         $middleware->api(append: [AttachRequestId::class]);
         $middleware->alias([
             'waflow.api' => AuthenticateApiKey::class,
             'waflow.subscription' => EnsureWorkspaceActive::class,
             'waflow.ability' => EnsureApiAbility::class,
             'waflow.audit' => LogApiRequest::class,
+            'waflow.body' => LimitRequestBodySize::class,
             'platform.admin' => EnsurePlatformAdmin::class,
             'partner.member' => EnsurePartnerMember::class,
         ]);

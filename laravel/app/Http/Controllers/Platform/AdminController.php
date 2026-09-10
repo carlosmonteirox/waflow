@@ -142,7 +142,7 @@ class AdminController extends Controller
     {
         $attributes = $request->validate(['is_platform_admin' => ['required', 'boolean']]);
         abort_if($user->is($request->user()) && ! $attributes['is_platform_admin'], 409, 'Você não pode remover o próprio acesso administrativo.');
-        $user->update($attributes);
+        $user->forceFill($attributes)->save();
 
         return back()->with('status', 'Acesso administrativo atualizado.');
     }

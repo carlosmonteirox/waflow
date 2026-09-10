@@ -29,10 +29,6 @@ class User extends Authenticatable implements MustVerifyEmailContract
         'registration_ip_hash',
         'device_fingerprint_hash',
         'trial_started_at',
-        'blocked_at',
-        'two_factor_enabled',
-        'last_two_factor_at',
-        'is_platform_admin',
     ];
 
     /**

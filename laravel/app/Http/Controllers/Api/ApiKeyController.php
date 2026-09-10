@@ -10,6 +10,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ApiKeyController extends Controller
 {
@@ -38,20 +39,44 @@ class ApiKeyController extends Controller
         $workspace = $this->workspace($request);
         $attributes = $request->validate([
             'name' => ['required', 'string', 'max:120'],
-            'abilities' => ['nullable', 'array'],
+            'abilities' => ['nullable', 'array', 'min:1'],
             'abilities.*' => ['string', 'max:80', Rule::in(array_merge(['*'], config('waflow.api.allowed_abilities', [])))],
         ]);
+        $issuerAbilities = array_values(array_unique($request->attributes->get('waflow.api_key')?->abilities ?? []));
+        $requestedAbilities = array_values(array_unique($attributes['abilities'] ?? $issuerAbilities));
+        if (! $this->canDelegate($issuerAbilities, $requestedAbilities)) {
+            throw ValidationException::withMessages([
+                'abilities' => 'A nova chave não pode receber permissões que a chave atual não possui.',
+            ]);
+        }
 
-        $issued = $limiter->serialized($workspace, function () use ($workspace, $limiter, $attributes): array {
+        $issued = $limiter->serialized($workspace, function () use ($workspace, $limiter, $attributes, $requestedAbilities): array {
             $limiter->ensureApiKeys($workspace);
 
-            return ApiKey::issue($workspace, $attributes['name'], $attributes['abilities'] ?? ['*']);
+            return ApiKey::issue($workspace, $attributes['name'], $requestedAbilities);
         });
 
         return response()->json([
             'data' => $issued['model'],
             'plain_text_token' => $issued['plain_text_token'],
         ], 201);
+    }
+
+    /** @param array<int, string> $issuer @param array<int, string> $requested */
+    private function canDelegate(array $issuer, array $requested): bool
+    {
+        if (in_array('*', $issuer, true)) {
+            return true;
+        }
+
+        foreach ($requested as $ability) {
+            $prefix = str($ability)->before(':').':*';
+            if ($ability === '*' || (! in_array($ability, $issuer, true) && ! in_array($prefix, $issuer, true))) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function destroy(Request $request, int $apiKey): JsonResponse

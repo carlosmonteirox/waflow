@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\ResolvesWorkspace;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\MessageEvent;
+use App\Rules\Base64Payload;
 use App\Services\UsageLimiter;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -162,7 +163,7 @@ class MessageController extends Controller
             'text' => ['nullable', 'string', 'max:4096'],
             'body' => ['nullable', 'string', 'max:4096'],
             'url' => ['nullable', 'url:http,https', 'max:4096'],
-            'base64' => ['nullable', 'string'],
+            'base64' => ['nullable', 'string', new Base64Payload((int) config('waflow.api.max_base64_bytes'))],
             'mimetype' => ['nullable', 'string', 'max:120'],
             'filename' => ['nullable', 'string', 'max:255'],
             'caption' => ['nullable', 'string', 'max:1024'],

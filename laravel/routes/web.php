@@ -18,12 +18,12 @@ Route::middleware('guest')->group(function (): void {
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
 
     Route::get('/register', [RegisteredUserController::class, 'create'])->name('register');
-    Route::post('/register', [RegisteredUserController::class, 'store'])->name('register.store');
+    Route::post('/register', [RegisteredUserController::class, 'store'])->middleware('throttle:waflow-registration')->name('register.store');
 
     Route::get('/forgot-password', [PasswordResetLinkController::class, 'create'])->name('password.request');
-    Route::post('/forgot-password', [PasswordResetLinkController::class, 'store'])->name('password.email');
+    Route::post('/forgot-password', [PasswordResetLinkController::class, 'store'])->middleware('throttle:waflow-password-email')->name('password.email');
     Route::get('/reset-password/{token}', [NewPasswordController::class, 'create'])->name('password.reset');
-    Route::post('/reset-password', [NewPasswordController::class, 'store'])->name('password.store');
+    Route::post('/reset-password', [NewPasswordController::class, 'store'])->middleware('throttle:waflow-password-reset')->name('password.store');
     Route::get('/two-factor', [TwoFactorPromptController::class, 'create'])->name('two-factor.challenge');
     Route::post('/two-factor', [TwoFactorPromptController::class, 'store'])->middleware('throttle:10,1')->name('two-factor.store');
     Route::post('/two-factor/resend', [TwoFactorPromptController::class, 'resend'])->middleware('throttle:2,1')->name('two-factor.resend');
@@ -54,7 +54,7 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/flows/{flow}/test', [PanelController::class, 'testFlow'])->name('panel.flows.test');
 
         Route::get('/messages', [PanelController::class, 'messages'])->name('panel.messages');
-        Route::post('/messages', [PanelController::class, 'sendMessage'])->name('panel.messages.store');
+        Route::post('/messages', [PanelController::class, 'sendMessage'])->middleware('throttle:30,1')->name('panel.messages.store');
 
         Route::get('/contacts', [PanelController::class, 'contacts'])->name('panel.contacts');
         Route::post('/contacts', [PanelController::class, 'storeContact'])->name('panel.contacts.store');
@@ -67,7 +67,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/developers', [PanelController::class, 'developers'])->name('panel.developers');
 
         Route::get('/webhooks', [PanelController::class, 'webhooks'])->name('panel.webhooks');
-        Route::post('/webhooks', [PanelController::class, 'storeWebhook'])->name('panel.webhooks.store');
+        Route::post('/webhooks', [PanelController::class, 'storeWebhook'])->middleware('throttle:10,1')->name('panel.webhooks.store');
         Route::delete('/webhooks/{webhook}', [PanelController::class, 'destroyWebhook'])->name('panel.webhooks.destroy');
 
         Route::get('/api-keys', [PanelController::class, 'apiKeys'])->name('panel.api-keys');

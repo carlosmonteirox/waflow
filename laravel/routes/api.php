@@ -24,13 +24,15 @@ Route::prefix('v1')->as('api.')->group(function (): void {
     Route::get('/health', SystemHealthController::class)->name('health');
     Route::get('/plans', [PlanController::class, 'index'])->name('plans.index');
     Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:waflow-registration')->name('auth.register');
-    Route::post('/internal/openwa/events', OpenWaEventController::class)->middleware('throttle:600,1')->name('internal.openwa.events');
+    Route::post('/internal/openwa/events', OpenWaEventController::class)
+        ->middleware(['waflow.body', 'throttle:waflow-openwa-webhook'])
+        ->name('internal.openwa.events');
     Route::post('/internal/billing/inter/{secret}/{event}', InterWebhookController::class)
         ->whereIn('event', ['rec', 'cobr'])
-        ->middleware('throttle:600,1')
+        ->middleware(['waflow.body', 'throttle:waflow-inter-webhook'])
         ->name('internal.billing.inter');
 
-    Route::middleware(['waflow.api', 'throttle:waflow-api'])->group(function (): void {
+    Route::middleware(['throttle:waflow-api-auth', 'waflow.api', 'throttle:waflow-api'])->group(function (): void {
         Route::post('/auth/email/verification-notification', [AuthController::class, 'resendVerification'])
             ->middleware('throttle:6,1')->name('auth.verification.resend');
 
@@ -62,8 +64,10 @@ Route::prefix('v1')->as('api.')->group(function (): void {
 
             Route::apiResource('messages', MessageController::class)->only(['index', 'store', 'show'])
                 ->middlewareFor(['index', 'show'], 'waflow.ability:messages:read')
-                ->middlewareFor('store', 'waflow.ability:messages:write');
-            Route::post('/messages/bulk', [MessageController::class, 'bulk'])->middleware('waflow.ability:messages:write')->name('messages.bulk');
+                ->middlewareFor('store', ['waflow.ability:messages:write', 'throttle:waflow-message-writes']);
+            Route::post('/messages/bulk', [MessageController::class, 'bulk'])
+                ->middleware(['waflow.ability:messages:write', 'throttle:waflow-bulk-messages'])
+                ->name('messages.bulk');
             Route::apiResource('portals', PortalController::class)
                 ->middlewareFor(['index', 'show'], 'waflow.ability:portals:read')
                 ->middlewareFor(['store', 'update', 'destroy'], 'waflow.ability:portals:write');
@@ -80,10 +84,14 @@ Route::prefix('v1')->as('api.')->group(function (): void {
             Route::apiResource('webhooks', WebhookController::class)
                 ->middlewareFor(['index', 'show'], 'waflow.ability:webhooks:read')
                 ->middlewareFor(['store', 'update', 'destroy'], 'waflow.ability:webhooks:write');
-            Route::post('/webhooks/{webhook}/test', [WebhookController::class, 'test'])->middleware('waflow.ability:webhooks:write')->name('webhooks.test');
+            Route::post('/webhooks/{webhook}/test', [WebhookController::class, 'test'])
+                ->middleware(['waflow.ability:webhooks:write', 'throttle:waflow-sensitive-api'])
+                ->name('webhooks.test');
 
             Route::get('/api-keys', [ApiKeyController::class, 'index'])->middleware('waflow.ability:api-keys:read')->name('api-keys.index');
-            Route::post('/api-keys', [ApiKeyController::class, 'store'])->middleware('waflow.ability:api-keys:write')->name('api-keys.store');
+            Route::post('/api-keys', [ApiKeyController::class, 'store'])
+                ->middleware(['waflow.ability:api-keys:write', 'throttle:waflow-sensitive-api'])
+                ->name('api-keys.store');
             Route::delete('/api-keys/{apiKey}', [ApiKeyController::class, 'destroy'])->whereNumber('apiKey')->middleware('waflow.ability:api-keys:write')->name('api-keys.destroy');
 
             Route::get('/team/members', [TeamController::class, 'members'])->middleware('waflow.ability:team:read')->name('team.members.index');

@@ -21,10 +21,9 @@ class PasswordResetLinkController extends Controller
             'email' => ['required', 'email'],
         ]);
 
-        $status = Password::sendResetLink($request->only('email'));
+        Password::sendResetLink($request->only('email'));
 
-        return $status === Password::RESET_LINK_SENT
-            ? redirect()->route('password.check-email')->with('status', __($status))->with('email', $request->email)
-            : back()->withInput($request->only('email'))->withErrors(['email' => __($status)]);
+        return redirect()->route('password.request')
+            ->with('status', 'Se existir uma conta com este e-mail, enviaremos um link para redefinir a senha.');
     }
 }

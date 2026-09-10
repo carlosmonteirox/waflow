@@ -31,6 +31,7 @@ class Webhook extends Model
     {
         return [
             'events' => 'array',
+            'signing_secret' => 'encrypted',
             'last_delivered_at' => 'datetime',
         ];
     }
