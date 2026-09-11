@@ -100,6 +100,16 @@ point.
 The public contract and examples are documented in [`docs/API.md`](docs/API.md).
 The machine-readable OpenAPI 3.1 contract is available in
 [`docs/openapi.yaml`](docs/openapi.yaml) and at `GET /api/openapi.yaml`.
+Security controls and accepted risks are in
+[`docs/SECURITY.md`](docs/SECURITY.md). Complete
+[`docs/PRODUCTION_CHECKLIST.md`](docs/PRODUCTION_CHECKLIST.md) before a public
+deployment.
+
+Validate a completed production environment without printing its secrets:
+
+```bash
+make preflight
+```
 
 ## Banco Inter Pix Automático
 

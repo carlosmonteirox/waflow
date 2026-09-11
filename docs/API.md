@@ -46,8 +46,8 @@ Content-Type: application/json
 {
   "name": "Portal Exemplo",
   "email": "integracao@portal.com.br",
-  "password": "a-strong-password",
-  "password_confirmation": "a-strong-password",
+  "password": "A-strong-password-123!",
+  "password_confirmation": "A-strong-password-123!",
   "workspace_name": "Portal Exemplo",
   "site_url": "https://portal.com.br",
   "portal_name": "Portal principal",
@@ -59,6 +59,22 @@ HTTP 201 returns `user`, `workspace`, `api_key`, `trial_ends_at` and, when a
 portal is supplied, its one-time `portal_verification_token`. The trial starts
 at registration and lasts 7 days by default. Resend the verification message
 with `POST /auth/email/verification-notification` using the API key.
+
+Passwords require at least 12 characters with upper and lower case letters,
+numbers and symbols. Registration is limited to 5 requests per IP per hour.
+
+## Rate Limits and Request Size
+
+Authenticated requests are limited to 120 per API key per minute. Message
+writes are limited to 60, bulk requests to 10, and sensitive webhook/API-key
+writes to 20 per key per minute. Before authentication, limits are tracked both
+by source IP (300/minute) and a SHA-256 fingerprint of the presented credential
+(120/minute). HTTP 429 indicates that a limit was reached.
+
+The gateway accepts request bodies up to 16 MiB. Base64 media is strictly
+validated and limited to 10 MiB after decoding; internal callbacks accept at
+most 1 MiB. See [`SECURITY.md`](SECURITY.md) for the complete matrix and
+configuration variables.
 
 ## Instance Lifecycle
 
@@ -174,6 +190,10 @@ X-Waflow-Signature: sha256=<hex-hmac>
 Verify the HMAC-SHA256 against the exact raw request body and reject replayed
 delivery IDs. Redirects are disabled. Failed deliveries retry with backoff and
 are recorded in `webhook_deliveries`.
+
+Webhook URLs are revalidated immediately before delivery. Private/reserved IPs,
+embedded credentials, non-standard ports and DNS resolutions containing a
+private address are rejected. Production destinations should always use HTTPS.
 
 ## Other Resources
 

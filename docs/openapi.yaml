@@ -62,8 +62,8 @@ paths:
               properties:
                 name: {type: string, maxLength: 120}
                 email: {type: string, format: email}
-                password: {type: string, format: password}
-                password_confirmation: {type: string, format: password}
+                password: {type: string, format: password, minLength: 12, description: Requer maiúscula, minúscula, número e símbolo.}
+                password_confirmation: {type: string, format: password, minLength: 12}
                 workspace_name: {type: string, maxLength: 120}
                 site_url: {type: string, format: uri}
                 portal_name: {type: string}
@@ -494,7 +494,7 @@ components:
         type: {type: string, enum: [text, image, video, audio, document, sticker, location, contact, poll]}
         text: {type: string, maxLength: 4096}
         url: {type: string, format: uri}
-        base64: {type: string}
+        base64: {type: string, description: Base64 estrito; máximo padrão de 10 MiB após decodificação.}
         caption: {type: string}
         latitude: {type: number}
         longitude: {type: number}
