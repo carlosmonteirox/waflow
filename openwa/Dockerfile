@@ -52,30 +52,30 @@ FROM docker.io/node:22-slim AS production
 # resolve to the same /usr/local/bin/puppeteer-chrome symlink below.
 ARG TARGETARCH
 ARG WAFLOW_BAILEYS_ONLY=false
-RUN apt-get update && apt-get install -y \
-    $([ "$TARGETARCH" = arm64 ] && echo chromium) \
-    fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    dumb-init \
-    gosu \
-    patch \
-    curl \
-    procps \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends dumb-init gosu curl procps \
+    && if [ "$WAFLOW_BAILEYS_ONLY" != "true" ]; then \
+        apt-get install -y --no-install-recommends \
+            $([ "$TARGETARCH" = arm64 ] && echo chromium) \
+            fonts-liberation \
+            libappindicator3-1 \
+            libasound2 \
+            libatk-bridge2.0-0 \
+            libatk1.0-0 \
+            libcups2 \
+            libdbus-1-3 \
+            libdrm2 \
+            libgbm1 \
+            libgtk-3-0 \
+            libnspr4 \
+            libnss3 \
+            libx11-xcb1 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxrandr2 \
+            xdg-utils \
+            patch; \
+    fi \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Puppeteer to skip automatic download during npm install (we download it explicitly below)
@@ -89,16 +89,19 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Backport upstream whatsapp-web.js#201832 (id._serialized -> id.$1 normalization,
-# broken by WA Web 2.3000.x ~2026-07-14) into the installed dep at build time.
-# The patcher self-disables once whatsapp-web.js ships the fix upstream.
-COPY scripts/patch-wwebjs-201832.js scripts/wwebjs-201832.patch ./scripts/
-
-# Install production dependencies only, then apply the backport patcher (needs `patch`).
-RUN npm ci --omit=dev \
-    && if [ "$WAFLOW_BAILEYS_ONLY" = "true" ]; then \
-        npm uninstall --no-save --ignore-scripts whatsapp-web.js; \
+# The Waflow image uses Baileys, so skip all optional dependencies—including
+# whatsapp-web.js/Puppeteer—rather than installing and subsequently removing them.
+RUN if [ "$WAFLOW_BAILEYS_ONLY" = "true" ]; then \
+        npm ci --omit=dev --omit=optional; \
     else \
+        npm ci --omit=dev; \
+    fi
+
+# Backport upstream whatsapp-web.js#201832 only in the generic dual-engine image.
+# Copying the patcher after npm ci also prevents the package postinstall hook from
+# trying to patch an intentionally absent whatsapp-web.js dependency.
+COPY scripts/patch-wwebjs-201832.js scripts/wwebjs-201832.patch ./scripts/
+RUN if [ "$WAFLOW_BAILEYS_ONLY" != "true" ]; then \
         node scripts/patch-wwebjs-201832.js; \
     fi \
     && npm cache clean --force
