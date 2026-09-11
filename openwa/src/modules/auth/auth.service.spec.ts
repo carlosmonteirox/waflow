@@ -65,19 +65,22 @@ describe('resolveSeedApiKey (first-boot default admin key)', () => {
 describe('bannerKeyLine (startup banner key masking)', () => {
   const FULL = 'owa_k1_0123456789abcdef0123456789abcdef';
 
-  it('prints the full key only when it was just created', () => {
-    expect(bannerKeyLine(FULL, true)).toBe(FULL);
+  it('masks a newly created key so the raw credential never enters startup logs', () => {
+    const line = bannerKeyLine(FULL);
+    expect(line).not.toContain('0123456789abcdef');
+    expect(line.startsWith('owa_k1_0')).toBe(true);
+    expect(line).toMatch(/data\/\.api-key|dashboard/);
   });
 
   it('masks the key on subsequent boots — the full secret is never re-logged', () => {
-    const line = bannerKeyLine(FULL, false);
+    const line = bannerKeyLine(FULL);
     expect(line).not.toContain('0123456789abcdef'); // the secret tail must not appear
     expect(line.startsWith('owa_k1_0')).toBe(true); // a short fingerprint is fine
     expect(line).toMatch(/data\/\.api-key|dashboard/); // points the operator to the real source
   });
 
   it('passes a placeholder through unchanged', () => {
-    expect(bannerKeyLine('(check dashboard for keys)', false)).toBe('(check dashboard for keys)');
+    expect(bannerKeyLine('(check dashboard for keys)')).toBe('(check dashboard for keys)');
   });
 });
 
