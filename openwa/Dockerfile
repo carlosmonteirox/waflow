@@ -9,7 +9,7 @@
 # minifier) optional dependency fails to install ("Cannot find module lightningcss.linux-arm64-gnu.node").
 # The per-arch runtime deps are installed natively in the target-platform production stage below.
 # NOTE: $BUILDPLATFORM requires BuildKit (CI uses buildx; modern `docker build`/compose default to it).
-FROM --platform=$BUILDPLATFORM docker.io/node:22-slim AS builder
+FROM --platform=$BUILDPLATFORM docker.io/node:26-slim AS builder
 
 WORKDIR /app
 
@@ -46,7 +46,7 @@ RUN npm run build && npm run dashboard:ci -- --include=dev && npm run dashboard:
 # Native modules must be compiled on the TARGET platform. Keeping the toolchain in
 # this throwaway stage prevents Python/GCC from increasing the final image or its
 # runtime attack surface.
-FROM docker.io/node:22-slim AS production-dependencies
+FROM docker.io/node:26-slim AS production-dependencies
 
 ARG WAFLOW_BAILEYS_ONLY=false
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -82,7 +82,7 @@ RUN npm install --prefix /tmp/sqlite-build-tools --no-save --package-lock=false 
     fi
 
 # ===== Stage 3: Production =====
-FROM docker.io/node:22-slim AS production
+FROM docker.io/node:26-slim AS production
 
 # Chrome for Testing has no linux-arm64 build, and Puppeteer's chromium snapshot
 # is x86_64-only on Linux too. So: amd64 uses Chrome for Testing (downloaded below)
