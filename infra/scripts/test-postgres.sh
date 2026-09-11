@@ -10,4 +10,4 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-docker compose -f "$compose_file" up --attach tests --abort-on-container-exit --exit-code-from tests
+docker compose -f "$compose_file" up --build --attach tests --abort-on-container-exit --exit-code-from tests

@@ -2,6 +2,10 @@ name: waflow-tests
 
 services:
   tests:
+    build:
+      context: ..
+      dockerfile: infra/docker/laravel/Dockerfile
+      target: test
     image: waflow/laravel:${WAFLOW_VERSION:-local}
     environment:
       APP_ENV: testing
@@ -23,9 +27,6 @@ services:
       - >-
         mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
         && php vendor/bin/phpunit --configuration phpunit.postgres.xml --do-not-cache-result
-    volumes:
-      - ../laravel:/var/www/html:ro
-      - ../docs:/var/www/docs:ro
     tmpfs:
       - /var/www/html/storage:uid=82,gid=82,mode=0770
       - /var/www/html/bootstrap/cache:uid=82,gid=82,mode=0770
@@ -34,6 +35,8 @@ services:
         condition: service_healthy
       redis-test:
         condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
 
   postgres-test:
     image: postgres:16-alpine

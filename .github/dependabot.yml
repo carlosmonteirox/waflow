@@ -1,0 +1,89 @@
+version: 2
+updates:
+  - package-ecosystem: composer
+    directory: /laravel
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Sao_Paulo
+    groups:
+      php-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /laravel
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:15"
+      timezone: America/Sao_Paulo
+    groups:
+      laravel-frontend:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /openwa
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:30"
+      timezone: America/Sao_Paulo
+    groups:
+      openwa:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /openwa/dashboard
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:45"
+      timezone: America/Sao_Paulo
+    groups:
+      dashboard:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /infra
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Sao_Paulo
+    groups:
+      compose-images:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /infra/docker/laravel
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:05"
+      timezone: America/Sao_Paulo
+    groups:
+      laravel-image:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /openwa
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:10"
+      timezone: America/Sao_Paulo
+    groups:
+      openwa-image:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:30"
+      timezone: America/Sao_Paulo
+    groups:
+      actions:
+        patterns: ["*"]
