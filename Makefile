@@ -19,7 +19,7 @@ ARTISAN := $(COMPOSE) exec -T laravel php artisan
 .PHONY: help init env up start stop down restart build rebuild ps logs shell \
 	artisan migrate seed queue-restart composer-install npm-install npm-dev \
 	npm-build test pint lint quality health compose-config clean-build destroy \
-	test-postgres e2e-live preflight
+	test-postgres e2e-live preflight smoke
 
 help: ## Lista os comandos disponíveis
 	@printf '%s\n' "$(APP_NAME) make targets:"
@@ -106,6 +106,9 @@ health: ## Consulta health check público
 
 preflight: ## Valida configuração e segredos obrigatórios de produção
 	./infra/scripts/preflight.sh
+
+smoke: ## Testa a stack completa em projeto/volumes Docker efêmeros
+	./infra/scripts/smoke.sh
 
 e2e-live: ## Envia mensagem real e testa concorrência (requer variáveis WAFLOW_E2E_*)
 	./infra/scripts/e2e-live.sh

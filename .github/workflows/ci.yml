@@ -126,3 +126,6 @@ jobs:
 
       - name: Build production images
         run: docker compose --env-file infra/.env -f infra/compose.yml build gateway laravel openwa
+
+      - name: Smoke test complete stack
+        run: make smoke

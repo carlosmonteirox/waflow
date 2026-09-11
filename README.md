@@ -137,11 +137,14 @@ cached and reused; mTLS verification remains enabled.
 ```bash
 make quality
 make test-postgres
+make smoke
 ```
 
 The PostgreSQL suite starts isolated PostgreSQL 16 and Redis 7 containers, runs
 all tests, and removes the ephemeral environment without touching development
-volumes.
+volumes. The smoke test then starts the complete production topology under an
+isolated Compose project, verifies health, security headers, private ports and
+the Baileys-only runtime, and removes its own ephemeral volumes.
 
 ## Live end-to-end test
 
