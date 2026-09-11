@@ -42,7 +42,46 @@ COPY . .
 # (devDependencies), which a NODE_ENV=production build env would otherwise omit.
 RUN npm run build && npm run dashboard:ci -- --include=dev && npm run dashboard:build
 
-# ===== Stage 2: Production =====
+# ===== Stage 2: Target-platform production dependencies =====
+# Native modules must be compiled on the TARGET platform. Keeping the toolchain in
+# this throwaway stage prevents Python/GCC from increasing the final image or its
+# runtime attack surface.
+FROM docker.io/node:22-slim AS production-dependencies
+
+ARG WAFLOW_BAILEYS_ONLY=false
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+WORKDIR /app
+COPY package*.json ./
+
+# Baileys-only deployments omit whatsapp-web.js/Puppeteer. npm also omits sqlite3
+# because TypeORM declares it as an optional peer, despite sqlite3 being a direct
+# app dependency, so add that one runtime package back without executing its
+# incompatible upstream prebuild installer.
+RUN if [ "$WAFLOW_BAILEYS_ONLY" = "true" ]; then \
+        npm ci --omit=dev --omit=optional \
+        && npm install --ignore-scripts --no-save --package-lock=false --omit=dev --omit=optional sqlite3@6.0.1; \
+    else \
+        npm ci --omit=dev; \
+    fi
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# sqlite3's distributed ARM binary currently requires a newer glibc than the
+# Debian slim runtime. Build it explicitly against this image's libc and verify
+# actual module loading (require.resolve alone would miss native-linker failures).
+RUN npm install --prefix /tmp/sqlite-build-tools --no-save --package-lock=false node-gyp@12 \
+    && cd /app/node_modules/sqlite3 \
+    && /tmp/sqlite-build-tools/node_modules/.bin/node-gyp rebuild --nodedir=/usr/local \
+    && cd /app \
+    && node -e "require('sqlite3')" \
+    && if [ "$WAFLOW_BAILEYS_ONLY" = "true" ]; then \
+        node -e "try { require.resolve('whatsapp-web.js'); process.exit(1); } catch {}"; \
+    fi
+
+# ===== Stage 3: Production =====
 FROM docker.io/node:22-slim AS production
 
 # Chrome for Testing has no linux-arm64 build, and Puppeteer's chromium snapshot
@@ -88,14 +127,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-
-# The Waflow image uses Baileys, so skip all optional dependencies—including
-# whatsapp-web.js/Puppeteer—rather than installing and subsequently removing them.
-RUN if [ "$WAFLOW_BAILEYS_ONLY" = "true" ]; then \
-        npm ci --omit=dev --omit=optional; \
-    else \
-        npm ci --omit=dev; \
-    fi
+COPY --from=production-dependencies /app/node_modules ./node_modules
 
 # Backport upstream whatsapp-web.js#201832 only in the generic dual-engine image.
 # Copying the patcher after npm ci also prevents the package postinstall hook from

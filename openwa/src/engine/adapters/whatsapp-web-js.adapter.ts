@@ -69,6 +69,9 @@ import {
   withInboundDownloadTimeout,
 } from './inbound-media-cap';
 import { ConcurrencyLimiter } from '../../common/utils/concurrency-limiter';
+import { resolveAuthTimeoutMs } from '../auth-timeout';
+
+export { resolveAuthTimeoutMs } from '../auth-timeout';
 
 /**
  * Map a whatsapp-web.js MessageAck integer to the neutral DeliveryStatus.
@@ -200,24 +203,6 @@ const READY_RECONCILE_TIMEOUT_MS = 90_000;
 // WhatsApp Web version resolution (the #488 auto-resolve) lives in a dependency-free module so infra
 // status can import it without loading whatsapp-web.js (engine lazy-loading). The adapter imports
 // resolveWebVersionPin above for use in initialize().
-
-/**
- * Optional override for whatsapp-web.js's initial boot/inject wait (#353). On slow first boots
- * (e.g. WSL2 or low-resource containers) the default 30s `authTimeoutMs` can expire before WhatsApp
- * Web finishes loading, aborting QR generation. Set WWEBJS_AUTH_TIMEOUT_MS to a larger value in
- * milliseconds (e.g. 120000) to extend it. Unset, or a value that is not a positive safe integer,
- * keeps the whatsapp-web.js default (30000ms).
- */
-export function resolveAuthTimeoutMs(): number | undefined {
-  const raw = process.env.WWEBJS_AUTH_TIMEOUT_MS?.trim();
-  if (!raw || !/^\d+$/.test(raw)) {
-    return undefined;
-  }
-  const ms = Number(raw);
-  // Number.isSafeInteger rejects Infinity (from huge digit strings) and >2^53 unsafe integers — both
-  // pass the /^\d+$/ shape check but would make whatsapp-web.js's inject loop wait effectively forever.
-  return Number.isSafeInteger(ms) && ms > 0 ? ms : undefined;
-}
 
 /**
  * Extracts the JID of the parent community a group is linked to, if any.

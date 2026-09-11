@@ -23,7 +23,7 @@ import { BaileysStoredMessage } from '../../engine/adapters/baileys-stored-messa
 import { BaileysAuthState } from '../../engine/adapters/baileys-auth-state.entity';
 import { CreateSessionDto } from './dto';
 import { EngineFactory } from '../../engine/engine.factory';
-import { resolveAuthTimeoutMs } from '../../engine/adapters/whatsapp-web-js.adapter';
+import { resolveAuthTimeoutMs } from '../../engine/auth-timeout';
 import { LidMappingStoreService } from '../../engine/identity/lid-mapping-store.service';
 import { userPart } from '../../engine/identity/wa-id';
 import { paginate, ListOptions, resolveListWindow } from '../../common/utils/paginate';
