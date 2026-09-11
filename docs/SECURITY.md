@@ -25,8 +25,10 @@ Internet -> Nginx -> Laravel -> PostgreSQL/Redis
 
 ## Autenticação e autorização
 
-- Chaves de API são armazenadas como SHA-256 e exibidas em texto puro uma única
-  vez.
+- Chaves criadas pela API são retornadas em texto puro somente na resposta de
+  criação e armazenadas como SHA-256. A chave mestra do OpenWA nunca aparece nos
+  logs, nem no primeiro boot; sua cópia local fica em `data/.api-key` com modo
+  `0600`.
 - Cada rota exige uma ability específica. Uma chave restrita só pode delegar um
   subconjunto das próprias abilities.
 - Contas do painel usam senha de ao menos 12 caracteres, maiúsculas, minúsculas,
@@ -98,7 +100,7 @@ WAF/CDN, controle de concorrência dos workers e quotas comerciais.
 ## Supply chain e CI
 
 - Lockfiles são obrigatórios. CI executa testes, lint, build, auditorias do npm e
-  Composer, teste em PostgreSQL 16 e build das imagens.
+  Composer, teste em PostgreSQL 16, build das imagens e smoke da stack completa.
 - CodeQL analisa JavaScript/TypeScript em pushes, pull requests e semanalmente.
 - Dependabot verifica Composer, npm, Docker e GitHub Actions semanalmente.
 - GitHub Actions de terceiros são fixadas por commit SHA.

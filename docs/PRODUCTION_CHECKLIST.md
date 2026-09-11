@@ -112,6 +112,7 @@ make preflight
 make quality
 make test-postgres
 docker compose --env-file infra/.env -f infra/compose.yml build gateway laravel openwa
+make smoke
 docker compose --env-file infra/.env -f infra/compose.yml up -d
 make health
 make e2e-live
