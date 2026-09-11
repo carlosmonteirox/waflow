@@ -30,6 +30,7 @@ x-laravel-environment: &laravel-environment
   SESSION_DRIVER: redis
   SESSION_ENCRYPT: "true"
   SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
+  WAFLOW_TRUSTED_PROXIES: ${WAFLOW_TRUSTED_PROXIES:-}
   QUEUE_CONNECTION: redis
   REDIS_CLIENT: phpredis
   REDIS_HOST: redis

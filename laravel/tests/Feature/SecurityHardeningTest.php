@@ -39,12 +39,14 @@ class SecurityHardeningTest extends TestCase
     {
         config()->set('waflow.api.authentication_attempts_per_ip', 2);
 
-        foreach (['invalid-one', 'invalid-two'] as $token) {
+        foreach (['invalid-one', 'invalid-two'] as $index => $token) {
             $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.42'])
+                ->withHeader('X-Forwarded-For', '203.0.113.'.($index + 1))
                 ->withToken($token)->getJson('/api/v1/workspace')->assertUnauthorized();
         }
 
         $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.42'])
+            ->withHeader('X-Forwarded-For', '203.0.113.99')
             ->withToken('invalid-three')->getJson('/api/v1/workspace')->assertTooManyRequests();
     }
 
