@@ -1,4 +1,4 @@
-FROM composer:2.8 AS vendor
+FROM composer:2.10 AS vendor
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY laravel ./
 RUN composer dump-autoload --no-dev --optimize --classmap-authoritative \
     && php artisan package:discover --ansi
 
-FROM composer:2.8 AS vendor-dev
+FROM composer:2.10 AS vendor-dev
 
 WORKDIR /app
 
@@ -30,7 +30,7 @@ COPY laravel ./
 RUN composer dump-autoload --optimize \
     && php artisan package:discover --ansi
 
-FROM node:22-alpine AS assets
+FROM node:26-alpine AS assets
 
 WORKDIR /app
 
@@ -42,7 +42,7 @@ COPY laravel/public ./public
 COPY laravel/vite.config.js ./
 RUN npm run build
 
-FROM php:8.3-fpm-alpine AS app
+FROM php:8.5-fpm-alpine AS app
 
 RUN apk add --no-cache \
         icu-libs \
@@ -102,7 +102,7 @@ USER www-data
 
 CMD ["php", "artisan", "test", "--configuration=phpunit.postgres.xml"]
 
-FROM nginx:1.27-alpine AS web
+FROM nginx:1.31-alpine AS web
 
 COPY infra/docker/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=vendor /app/public /var/www/html/public
